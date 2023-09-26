@@ -1,3 +1,2 @@
 # Auto detect text files and perform LF normalization
 * text=auto
-# mm_avh/bin/ffmpeg/bin/*.exe filter=lfs diff=lfs merge=lfs -text
