@@ -1,0 +1,15 @@
+deepl
+edge_tts
+googletrans==3.1.0a0
+natsort
+nltk
+pyasstosrt
+pyautogui
+pydub
+pyperclip
+pysrt
+pysubs2
+pyttsx3
+revChatGPT
+rich
+six
