@@ -1,0 +1,5 @@
+Do podanych folderów:
+C:\Program Files (x86)\IVONA\IVONA 2 Voice\x64
+C:\Program Files (x86)\IVONA\IVONA 2 Voice\x86
+Wklej crack:
+ivona_sapi5_voice_v1.6.63.dll w folderze \crack_dll
