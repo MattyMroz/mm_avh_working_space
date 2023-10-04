@@ -67,7 +67,6 @@ mm_avh_working_space
 │   ├───mkvtoolnix ...
 │   └───models
 ├───data
-├───installation.zip ❗
 ├───modules
 ├───tests ❌
 ├───utils
@@ -81,10 +80,11 @@ mm_avh_working_space
 Pliki na poziomie głównym to:
 
 - `constants.py`
+- `installation.zip`❗
 - `LICENSE`
 - `README.md`
-- `start.py` ❗
 - `requirements.txt` ❗
+- `start.py` ❗
 
 ❌ - zbędne po zapoznaiu się z urzwyaniem
 
@@ -92,10 +92,11 @@ Pliki na poziomie głównym to:
 
 ## 🔗 Linki
 
-- [Strona Główna - do zrobienia❗❗❗](https://mattymroz.github.io/mm_avh/)
+<!-- - [Strona Główna - do zrobienia❗❗❗](https://mattymroz.github.io/mm_avh/) -->
+
 - [Media Players](https://github.com/MattyMroz/mm_avh_media_players)
 - [Web Players](https://github.com/MattyMroz/mm_avh_web_players)
-- [Working Space **TU**](https://github.com/MattyMroz/mm_avh_working_space)
+- [11Labs_TTS_Colab_Shere](https://github.com/MattyMroz/11Labs_TTS_Colab_Shere)
 
 ## 🔍 Wymagania
 
@@ -114,11 +115,9 @@ Proszę zauważyć, że niektóre funkcje programu mogą wymagać dodatkowych za
 
 Aby zainstalować i skonfigurować **MM_AVH Working Space**, wykonaj następujące kroki:
 
-1. **Pobierz skompresowany program**: Pobierz skompresowany program na jeden z trzech sposobów:
+1. **Pobierz skompresowany program**: Pobierz skompresowaną paczkę `mm_avh_working_space.zip`:
 
-- Bezpośrednio z [Hugging Face](https://www.example.com/huggingface).
-- Za pomocą Git z [Hugging Face](https://www.example.com/huggingface). Jeśli nie masz zainstalowanego Git, możesz go pobrać stąd: [Git Downloads](https://git-scm.com/downloads). Użyj polecenia `git clone https://www.example.com/huggingface.git` w terminalu.
-- Lub z [Google Drive](https://www.example.com/googledrive).
+- Bezpośrednio z [Hugging Face](https://huggingface.co/datasets/MattyMroz/mm_avh_working_space/tree/main) (wykrywa jako niebezpieczny, bo zawiera pliki exe, które nie spełniają norm bezpieczeństwa \*\_\*)
 
 2. **Rozpakuj pliki**: Rozpakuj pobrane pliki do wybranej lokalizacji.
 
@@ -134,9 +133,9 @@ Aby zainstalować i skonfigurować **MM_AVH Working Space**, wykonaj następują
 
 6. **Instalacja głosów systemowych**: Program korzysta z głosów systemowych dostarczanych przez Speech2Go i IVONA. Instalatory znajdują się w pliku `installation.zip`.
 
-7. **Konfiguracja głosów API**: Program korzysta z edge-tts dla głosów API. Lista dostępnych głosów edge znajduje się pod tym [linkiem](https://www.example.com/edge-voices) lub w folderze `tests/tts_online_edge_test_1.py`. Istnieje również możliwość korzystania z Google TTS, ale jakość dźwięku może nie być zadowalająca dla długotrwałego słuchania.
+7. **Konfiguracja głosów API**: Program korzysta z edge-tts dla głosów API. Lista dostępnych głosów edge znajduje się pod tym [linkiem](https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=6A5AA1D4EAFF4E9FB37E23D68491D6F4) lub w folderze `tests/tts_online_edge_test_1.py`. Istnieje również możliwość korzystania z Google TTS, ale jakość dźwięku może nie być zadowalająca dla długotrwałego słuchania.
 
-8. **Konfiguracja głosów Eleven Labs**: Program może również korzystać z głosów dostarczanych przez Eleven Labs. Nie jest wymagana żadna dodatkowa instalacja lokalnie, ale musisz skierować się do odpowiedniego repozytorium GitHub z notatnikiem Google Colab i instrukcjami obsługi. Repozytorium znajdziesz pod adresem:[11Labs_TTS_Colab](https://www.example.com/11Labs_TTS_Colab). PS.: Możliwe jest również korzystanie z głosów Eleven Labs za pomocą API, lokalnie, ale ta funkcja nie jest jeszcze zaimplementowana, ze wzglądu na koszty API..., poprzednie rozwiązanie jest darmowe.
+8. **Konfiguracja głosów Eleven Labs**: Program może również korzystać z głosów dostarczanych przez Eleven Labs. Nie jest wymagana żadna dodatkowa instalacja lokalnie, ale musisz skierować się do odpowiedniego repozytorium GitHub z notatnikiem Google Colab i instrukcjami obsługi. Repozytorium znajdziesz pod adresem: [11Labs_TTS_Colab](https://github.com/MattyMroz/11Labs_TTS_Colab_Shere). PS.: Możliwe jest również korzystanie z głosów Eleven Labs za pomocą API, lokalnie, ale ta funkcja nie jest jeszcze zaimplementowana, ze wzglądu na koszty API..., poprzednie rozwiązanie jest darmowe.
 
 Po wykonaniu powyższych kroków, **MM_AVH Working Space** powinien być gotowy do użycia!
 
@@ -144,7 +143,7 @@ Po wykonaniu powyższych kroków, **MM_AVH Working Space** powinien być gotowy 
 
 Główne aktualizacje będą wykonywane przeze mnie. Możesz pobrać najnowszą wersję za pomocą poniższego linku, tak samo jak w przypadku pierwszej instalacji.
 
-[![Pobierz najnowszą wersję MM_AVH Working Space](https://img.shields.io/badge/Pobierz-najnowszą%20wersję%20MM_AVH%20Working%20Space-blue?style=for-the-badge&logo=github)](https://www.example.com/download-link)
+[![Pobierz najnowszą wersję MM_AVH Working Space](https://img.shields.io/badge/Pobierz-najnowszą%20wersję%20MM_AVH%20Working%20Space-blue?style=for-the-badge&logo=github)](https://huggingface.co/datasets/MattyMroz/mm_avh_working_space/tree/main)
 
 ## 📝 Opis Programów
 
