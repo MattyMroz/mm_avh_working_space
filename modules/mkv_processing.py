@@ -94,8 +94,10 @@ class MKVProcessing:
         """
         for filename in listdir(self.working_space_output):
             if filename.startswith(self.filename):
-                move(path.join(self.working_space_output,
-                     filename), self.working_space)
+                destination_path = path.join(self.working_space, filename)
+                if path.exists(destination_path):
+                    remove(destination_path)
+                move(path.join(self.working_space_output, filename), destination_path)
 
     def mkv_merge(self) -> None:
         """
