@@ -236,7 +236,7 @@ class SubtitleRefactor:
 
     def ass_to_srt(self) -> None:
         """
-            Converts ASS subtitle files to SRT format.
+            Converts ASS subtitle files to SRT format and removes HTML tags.
         """
         folders = [self.working_space_temp_main_subs,
                    self.working_space_temp_alt_subs]
@@ -252,7 +252,12 @@ class SubtitleRefactor:
             for i, sub in enumerate(ass_subs):
                 srt_subs.insert(i, sub)
 
-            srt_subs.save(file_path.replace('.ass', '.srt'), encoding='utf-8')
+            srt_content = srt_subs.to_string(format_='srt')
+            srt_content = re.sub(r'<.*?>', '', srt_content)
+
+            with open(file_path.replace('.ass', '.srt'), 'w', encoding='utf-8') as file:
+                file.write(srt_content)
+
         console.print()
 
     def move_srt(self) -> None:
@@ -363,7 +368,8 @@ class SubtitleRefactor:
                     srt_lines = srt_subs[srt_index].text.split('\n')
                     last_brace_position = event.text.rfind('}')
                     if last_brace_position != -1:
-                        event.text = event.text[:last_brace_position + 1] + '\n'.join(srt_lines)
+                        event.text = event.text[:last_brace_position +
+                                                1] + '\n'.join(srt_lines)
                     else:
                         event.text = '\n'.join(srt_lines)
                     srt_index += 1
@@ -372,7 +378,8 @@ class SubtitleRefactor:
             srt_subs = load(srt_file_path, encoding='utf-8')
             ass_subs = SSAFile()
             for i, sub in enumerate(srt_subs):
-                ass_subs.insert(i, SSAEvent(start=sub.start, end=sub.end, text=sub.text))
+                ass_subs.insert(i, SSAEvent(start=sub.start,
+                                end=sub.end, text=sub.text))
             ass_subs.save(output_file_path)
             output_file_path = output_file_path.replace('.srt', '.ass')
             move(srt_file_path, output_file_path)
