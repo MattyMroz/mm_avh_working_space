@@ -246,8 +246,13 @@ class SubtitleRefactor:
             if not path.exists(file_path):
                 continue
 
-            sub: Subtitle = Subtitle(file_path)
-            sub.export()
+            ass_subs = SSAFile.load(file_path)
+            srt_subs = SSAFile()
+
+            for i, sub in enumerate(ass_subs):
+                srt_subs.insert(i, sub)
+
+            srt_subs.save(file_path.replace('.ass', '.srt'), encoding='utf-8')
         console.print()
 
     def move_srt(self) -> None:
@@ -279,13 +284,12 @@ class SubtitleRefactor:
 
     def txt_to_srt(self, lines_per_caption: int) -> None:
         """
-        Converts a text file to SRT (SubRip Text) format.
+            Converts a text file to SRT (SubRip Text) format.
 
-        This method reads a text file, tokenizes the text into sentences using the NLTK library, and writes the sentences into a new SRT file. Groups of sentences are combined into a single caption based on the 'lines_per_caption' parameter. Each group becomes a separate subtitle in the SRT file. The original text file is then deleted, and the filename attribute of the class instance is updated to the new SRT file. Finally, the SRT file is moved to the 'main_subs' directory.
+            This method reads a text file, tokenizes the text into sentences using the NLTK library, and writes the sentences into a new SRT file. Groups of sentences are combined into a single caption based on the 'lines_per_caption' parameter. Each group becomes a separate subtitle in the SRT file. The original text file is then deleted, and the filename attribute of the class instance is updated to the new SRT file. Finally, the SRT file is moved to the 'main_subs' directory.
 
-        Args:
-            lines_per_caption (int): The number of sentences to include in each caption.
-
+            Args:
+                lines_per_caption (int): The number of sentences to include in each caption.
         """
         txt_file_path: str = path.join(self.working_space_temp, self.filename)
         srt_file_path: str = txt_file_path.replace('.txt', '.srt')
@@ -356,16 +360,11 @@ class SubtitleRefactor:
             for event in ass_subs.events:
                 if event.type == "Dialogue" and srt_index < len(srt_subs):
                     srt_lines = srt_subs[srt_index].text.split('\n')
-                    ass_lines = event.text.split('}')
-                    if len(ass_lines) >= len(srt_lines):
-                        for j in range(len(srt_lines)):
-                            last_brace_position = ass_lines[j].rfind('}')
-                            if last_brace_position != -1:
-                                ass_lines[j] = ass_lines[j][:last_brace_position +
-                                                            1] + srt_lines[j]
-                        event.text = '}'.join(ass_lines)
+                    last_brace_position = event.text.rfind('}')
+                    if last_brace_position != -1:
+                        event.text = event.text[:last_brace_position +
+                                                1] + '\n'.join(srt_lines)
                     srt_index += 1
-
             ass_subs.save(output_file_path)
         else:
             output_file_path = output_file_path.replace('.ass', '.srt')
