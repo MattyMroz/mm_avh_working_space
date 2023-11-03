@@ -115,7 +115,7 @@ def refactor_subtitles():  # ✅
 
     files: List[str] = get_files_with_extensions(
         WORKING_SPACE_TEMP, subtitle_extensions)
-    sorted_files = natsorted(files)
+    sorted_files: List[str] = natsorted(files)
     for filename in sorted_files:
         refactor_subtitle_file(filename)
 
@@ -289,8 +289,9 @@ def generate_audio_for_subtitles(settings: Settings) -> None:  # ✅
         return
 
     main_subs_files: List[str] = get_srt_files(WORKING_SPACE_TEMP_MAIN_SUBS)
+    sorted_files: List[str] = natsorted(main_subs_files)
     files_to_generate_audio: Dict[str, bool] = ask_to_generate_audio_files(
-        main_subs_files)
+        sorted_files)
     generate_audio_files(files_to_generate_audio, settings)
 
 
@@ -340,7 +341,7 @@ def refactor_alt_subtitles():  # ✅
         Refactors alternative subtitles to a standard format.
     """
     files: List[str] = get_srt_files(WORKING_SPACE_TEMP_ALT_SUBS)
-    sorted_files = natsorted(files)
+    sorted_files: List[str] = natsorted(files)
     for filename in sorted_files:
         subtitle: SubtitleRefactor = SubtitleRefactor(filename)
         subtitle.srt_to_ass()

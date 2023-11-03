@@ -86,7 +86,7 @@ Pliki na poziomie głównym to:
 - `requirements.txt` ❗
 - `start.py` ❗
 
-❌ - zbędne po zapoznaiu się z urzwyaniem
+❌ - zbędne po zapoznaiu się z używaniem programu
 
 ❗ - ważne
 
