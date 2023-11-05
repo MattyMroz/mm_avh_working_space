@@ -364,7 +364,7 @@ class SubtitleRefactor:
             ass_subs = SSAFile.load(ass_file_path)
             srt_index = 0
             for event in ass_subs.events:
-                if event.type == "Dialogue" and srt_index < len(srt_subs):
+                if event.type == "Dialogue" and srt_index < len(srt_subs) and not re.search(r'\b(m|n) \d', event.text):
                     srt_lines = srt_subs[srt_index].text.split('\n')
                     last_brace_position = event.text.rfind('}')
                     if last_brace_position != -1:
@@ -383,9 +383,6 @@ class SubtitleRefactor:
             ass_subs.save(output_file_path)
             output_file_path = output_file_path.replace('.srt', '.ass')
             move(srt_file_path, output_file_path)
-
-        console.print("Przeniesiono alternatywne napisy:", style="green_bold")
-        console.print(output_file_path, style="white_bold")
 
         console.print("Przeniesiono alternatywne napisy:", style="green_bold")
         console.print(output_file_path, style="white_bold")
