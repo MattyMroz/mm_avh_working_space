@@ -289,13 +289,12 @@ class SubtitleRefactor:
 
     def txt_to_srt(self, lines_per_caption: int) -> None:
         """
-        Converts a text file to SRT (SubRip Text) format.
+            Converts a text file to SRT (SubRip Text) format.
 
-        This method reads a text file, tokenizes the text into sentences using the NLTK library, and writes the sentences into a new SRT file. Groups of sentences are combined into a single caption based on the 'lines_per_caption' parameter. Each group becomes a separate subtitle in the SRT file. The original text file is then deleted, and the filename attribute of the class instance is updated to the new SRT file. Finally, the SRT file is moved to the 'main_subs' directory.
+            This method reads a text file, tokenizes the text into sentences using the NLTK library, and writes the sentences into a new SRT file. Groups of sentences are combined into a single caption based on the 'lines_per_caption' parameter. Each group becomes a separate subtitle in the SRT file. The original text file is then deleted, and the filename attribute of the class instance is updated to the new SRT file. Finally, the SRT file is moved to the 'main_subs' directory.
 
-        Args:
-            lines_per_caption (int): The number of sentences to include in each caption.
-
+            Args:
+                lines_per_caption (int): The number of sentences to include in each caption.
         """
         txt_file_path: str = path.join(self.working_space_temp, self.filename)
         srt_file_path: str = txt_file_path.replace('.txt', '.srt')
