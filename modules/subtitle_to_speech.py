@@ -182,11 +182,11 @@ class SubtitleToSpeech:
 
     def _save_subtitle_to_wav(self, engine: pyttsx3.Engine, text: str) -> None:
         """
-        Saves a single subtitle to a temporary WAV file.
+            Saves a single subtitle to a temporary WAV file.
 
-        Args:
-            - engine (pyttsx3.Engine): The TTS engine to use for speech synthesis.
-            - text (str): The text of the subtitle to convert to speech.
+            Args:
+                - engine (pyttsx3.Engine): The TTS engine to use for speech synthesis.
+                - text (str): The text of the subtitle to convert to speech.
         """
         engine.save_to_file(text, path.join(
             self.working_space_temp, "temp.wav"))

@@ -273,18 +273,14 @@ class SubtitleRefactor:
         source_file_path: str = path.join(
             self.working_space_temp, self.filename)
 
-        # Otwórz plik źródłowy i przeczytaj jego zawartość
         with open(source_file_path, 'r', encoding='utf-8') as file:
             file_content = file.read()
 
-        # Usuń znaczniki HTML
-        file_content = re.sub(r'<.*?>', '', file_content)
+        file_content = re.sub(r'{\\an\d+}', '', file_content)
 
-        # Zapisz zmodyfikowaną zawartość do pliku docelowego
         with open(target_file_path, 'w', encoding='utf-8') as file:
             file.write(file_content)
 
-        # Usuń plik źródłowy
         remove(source_file_path)
 
     def txt_to_srt(self, lines_per_caption: int) -> None:
