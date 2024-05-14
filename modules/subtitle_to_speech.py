@@ -182,11 +182,11 @@ class SubtitleToSpeech:
 
     def _save_subtitle_to_wav(self, engine: pyttsx3.Engine, text: str) -> None:
         """
-            Saves a single subtitle to a temporary WAV file.
+        Saves a single subtitle to a temporary WAV file.
 
-            Args:
-                - engine (pyttsx3.Engine): The TTS engine to use for speech synthesis.
-                - text (str): The text of the subtitle to convert to speech.
+        Args:
+            - engine (pyttsx3.Engine): The TTS engine to use for speech synthesis.
+            - text (str): The text of the subtitle to convert to speech.
         """
         engine.save_to_file(text, path.join(
             self.working_space_temp, "temp.wav"))
@@ -354,7 +354,7 @@ class SubtitleToSpeech:
                     remove(mp3_file_path)
                     self._add_empty_frame_if_needed(wav_file, start_time)
                     sound_data: bytes = sound.raw_data
-                    wav_file.writefqrames(sound_data)
+                    wav_file.writeframes(sound_data)
 
     def srt_to_wav_edge_online(self, tts: str, tts_speed: str, tts_volume: str) -> None:
         """

@@ -88,9 +88,9 @@ class MKVProcessing:
 
     def move_files_to_working_space(self) -> None:
         """
-            Moves the processed files to the working directory.
+        Moves the processed files to the working directory.
 
-            This method iterates over the files in the output directory and moves any files that start with the filename of the MKV file being processed to the working directory.
+        This method iterates over the files in the output directory and moves any files that start with the filename of the MKV file being processed to the working directory.
         """
         for filename in listdir(self.working_space_output):
             if filename.startswith(self.filename):

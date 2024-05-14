@@ -86,7 +86,7 @@ class MkvToolNix:
         try:
             self._check_executables()
             command: List[str] = self._get_mkv_info_command()
-            with Popen(command, stdout=PIPE, stderr=PIPE, universal_newlines=True, encoding='UTF-8') as process:
+            with Popen(command, stdout=PIPE, stderr=PIPE, universal_newlines=True, encoding='utf-8') as process:
                 output, error = process.communicate()
 
                 if process.returncode == 0:

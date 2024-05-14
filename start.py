@@ -26,10 +26,10 @@ from utils.execution_timer import execution_timer
 
 def check_and_create_directories(directories: List[str]):  # ✅
     """
-    Checks if the given directories exist, and if not, creates them.
+        Checks if the given directories exist, and if not, creates them.
 
-    Args:
-        directories (List[str]): A list of directory paths to check and create.
+        Args:
+            directories (List[str]): A list of directory paths to check and create.
     """
     for directory in directories:
         if not path.exists(directory):
@@ -154,7 +154,9 @@ def refactor_subtitle_file(filename: str):
     if filename.endswith('.srt'):
         subtitle.move_srt()
     if filename.endswith('.txt'):
-        subtitle.txt_to_srt(10)
+        subtitle.txt_to_srt(chunk_limit=250,
+                            sentence_length=750,
+                            split_method='word')
 
 
 def translate_subtitles(settings: Settings):  # ✅
@@ -183,10 +185,10 @@ def get_srt_files(directory: str) -> List[str]:
         Returns:
             List[str]: A list of SRT files in the directory.
     """
-    return [
+    return natsorted([
         filename for filename in listdir(directory)
         if path.isfile(path.join(directory, filename)) and filename.endswith('.srt')
-    ]
+    ])
 
 
 def ask_to_translate_files(files: List[str]) -> dict:
@@ -208,6 +210,7 @@ def ask_to_translate_files(files: List[str]) -> dict:
         else:
             console.print('Pomijam tę opcję.\n', style='red_bold')
             files_to_translate[filename] = False
+
     return files_to_translate
 
 
@@ -220,15 +223,20 @@ def translate_files(files_to_translate: dict, settings: Settings):
             settings (Settings): The settings to use for translation.
     """
     translator_instance: SubtitleTranslator = SubtitleTranslator()
-    for filename, should_translate in files_to_translate.items():
-        if should_translate:
-            translator_instance.translate_srt(filename,
-                                              WORKING_SPACE_TEMP_MAIN_SUBS,
-                                              settings)
-            if path.exists(path.join(WORKING_SPACE_TEMP_ALT_SUBS, filename)):
+
+    # Sprawdzenie, czy ustawienia zawierają konkretny translator
+    if 'Gemini Pro' in settings.translator:
+        translator_instance.translate_gemini()
+    else:
+        for filename, should_translate in files_to_translate.items():
+            if should_translate:
                 translator_instance.translate_srt(filename,
-                                                  WORKING_SPACE_TEMP_ALT_SUBS,
+                                                  WORKING_SPACE_TEMP_MAIN_SUBS,
                                                   settings)
+                if path.exists(path.join(WORKING_SPACE_TEMP_ALT_SUBS, filename)):
+                    translator_instance.translate_srt(filename,
+                                                      WORKING_SPACE_TEMP_ALT_SUBS,
+                                                      settings)
 
 
 def convert_numbers_to_words():  # ✅
@@ -241,22 +249,6 @@ def convert_numbers_to_words():  # ✅
 
     srt_files = get_srt_files(WORKING_SPACE_TEMP_MAIN_SUBS)
     convert_numbers_in_files(srt_files)
-
-
-def get_srt_files(directory: str) -> List[str]:
-    """
-        Gets all SRT files in a directory.
-
-        Args:
-            directory (str): The directory to search for SRT files.
-
-        Returns:
-            List[str]: A list of SRT files in the directory.
-    """
-    return [
-        file for file in listdir(directory)
-        if path.isfile(path.join(directory, file)) and file.endswith('.srt')
-    ]
 
 
 def convert_numbers_in_files(files: List[str]):
@@ -289,9 +281,8 @@ def generate_audio_for_subtitles(settings: Settings) -> None:  # ✅
         return
 
     main_subs_files: List[str] = get_srt_files(WORKING_SPACE_TEMP_MAIN_SUBS)
-    sorted_files: List[str] = natsorted(main_subs_files)
     files_to_generate_audio: Dict[str, bool] = ask_to_generate_audio_files(
-        sorted_files)
+        main_subs_files)
     generate_audio_files(files_to_generate_audio, settings)
 
 
@@ -407,6 +398,7 @@ if __name__ == '__main__':
                               WORKING_SPACE_TEMP, WORKING_SPACE_TEMP_MAIN_SUBS, WORKING_SPACE_TEMP_ALT_SUBS]
     check_and_create_directories(directories)
     main()
+
     console.print(
         '\n[green_italic]Naciśnij dowolny klawisz, aby zakończyć działanie programu...', end='')
     getch()
