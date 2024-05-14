@@ -17,7 +17,7 @@
 
     * Example usage for converting a text file to SRT format and performing other operations:
         subtitle_tool = SubtitleRefactor("sample_text.txt")
-        subtitle_tool.txt_to_srt(1)
+        subtitle_tool.txt_to_srt(400)
 
     * Example usage for converting numbers in an SRT subtitle file to their word equivalents in Polish:
         subtitle_tool = SubtitleRefactor("sample_subtitle.srt")
@@ -35,7 +35,7 @@ from os import makedirs, path, remove, stat
 from shutil import move
 from typing import List, Tuple
 
-from nltk.tokenize import sent_tokenize
+from nltk.tokenize import sent_tokenize, word_tokenize
 from pyasstosrt import Subtitle
 from pysubs2 import load, SSAEvent, SSAFile
 
@@ -47,6 +47,7 @@ from constants import (WORKING_SPACE,
                        console)
 
 from utils.number_in_words import NumberInWords
+from utils.text_chunker import chunk_text
 
 
 @dataclass(slots=True)
@@ -66,7 +67,7 @@ class SubtitleRefactor:
             - split_ass(self) -> None: Splits an ASS subtitle file into two files based on selected styles.
             - ass_to_srt(self) -> None: Converts ASS subtitle files to SRT format.
             - move_srt(self) -> None: Moves an SRT subtitle file to a specified directory.
-            - txt_to_srt(self, lines_per_caption: int) -> None: Converts a text file to SRT (SubRip Text) format.
+            - txt_to_srt(self, sentence_length: int) -> None: Converts a text file to SRT (SubRip Text) format.
             - convert_numbers_in_srt(self) -> None: Converts numbers in an SRT subtitle file to their word equivalents in Polish.
             - srt_to_ass(self) -> None: Updates subtitles in an existing ASS file using translated subtitles from an SRT file. If the ASS file does not exist, the SRT file is moved to the output directory, and its extension is changed to .ass. After these operations, the original ASS and SRT files are deleted.
     """
@@ -283,14 +284,17 @@ class SubtitleRefactor:
 
         remove(source_file_path)
 
-    def txt_to_srt(self, lines_per_caption: int) -> None:
+    # TODO: dodać deklaracje typów i zmowyfikowac instrukcjie na górze itp.
+    def txt_to_srt(self, chunk_limit: int = 750, sentence_length: int = 0, split_method: str = 'word') -> None:
         """
-            Converts a text file to SRT (SubRip Text) format.
+        Converts a text file to SRT (SubRip Text) format.
 
-            This method reads a text file, tokenizes the text into sentences using the NLTK library, and writes the sentences into a new SRT file. Groups of sentences are combined into a single caption based on the 'lines_per_caption' parameter. Each group becomes a separate subtitle in the SRT file. The original text file is then deleted, and the filename attribute of the class instance is updated to the new SRT file. Finally, the SRT file is moved to the 'main_subs' directory.
+        This method reads a text file, divides the text into manageable chunks based on the specified split method ('word' or 'char'), and then, if sentence_length is greater than 0, groups these chunks into captions for the SRT file based on the 'sentence_length' parameter. If sentence_length is 0, it returns the chunks as they are from the chunk_text function without further processing.
 
-            Args:
-                lines_per_caption (int): The number of sentences to include in each caption.
+        Args:
+            chunk_limit (int): The maximum number of characters in a chunk when initially dividing the text.
+            sentence_length (int): The maximum length of a sentence in characters. If 0, no further processing is done on chunks.
+            split_method (str): The method to use for splitting the text ('word' or 'char').
         """
         txt_file_path: str = path.join(self.working_space_temp, self.filename)
         srt_file_path: str = txt_file_path.replace('.txt', '.srt')
@@ -298,19 +302,50 @@ class SubtitleRefactor:
         with open(txt_file_path, 'r', encoding='utf-8') as file:
             text: str = file.read()
 
-        sentences: List[str] = sent_tokenize(text)
+        # Usuń podwójne nowe linie i zamień je na pojedyncze spacje
+        text = text.replace('\n\n', '\n').replace('\n', ' ')
 
-        subs: SSAFile = SSAFile()
-        for i in range(0, len(sentences), lines_per_caption):
-            caption = ' '.join(sentences[i:i+lines_per_caption]).strip()
-            event: SSAEvent = SSAEvent(start=0, end=0, text=caption)
+        # Podziel tekst na początkowe chunki zgodnie z wybraną metodą
+        initial_chunks = chunk_text(
+            text, method=split_method, limit=chunk_limit)
+
+        if sentence_length == 0:
+            captions = initial_chunks
+        else:
+            captions = []
+            current_caption = ""
+
+            def add_chunk_to_caption(chunk):
+                nonlocal current_caption
+                if len(current_caption) + len(chunk) <= sentence_length:
+                    current_caption += "" + chunk if current_caption else chunk
+                else:
+                    captions.append(current_caption)
+                    current_caption = chunk
+
+            for chunk in initial_chunks:
+                if len(chunk) <= sentence_length:
+                    add_chunk_to_caption(chunk)
+                else:
+                    # Dzielenie zbyt długich chunków na mniejsze części, zależnie od metody
+                    sub_chunks = chunk_text(
+                        chunk, method=split_method, limit=sentence_length // 2)
+                    for sub_chunk in sub_chunks:
+                        add_chunk_to_caption(sub_chunk)
+
+            # Dodaj ostatnią część tekstu, jeśli istnieje
+            if current_caption:
+                captions.append(current_caption)
+
+        subs = SSAFile()
+        for i, caption in enumerate(captions, start=1):
+            event = SSAEvent(start=0, end=0, text=caption.strip())
             subs.append(event)
 
         with open(srt_file_path, 'w', encoding='utf-8') as file:
             file.write(subs.to_string(format_='srt'))
 
         remove(txt_file_path)
-
         self.filename = self.filename.replace('.txt', '.srt')
         self.move_srt()
 
