@@ -182,7 +182,7 @@ Tutaj możesz podziękować osobom, które pomogły Ci w projekcie. Możesz poda
 
 ## 📄 Licencja
 
-Ten projekt jest licencjonowany na podstawie licencji zawartej w pliku [LICENCE](./LICENCE) dostępnym w tym samym folderze co ten plik README.
+Ten projekt jest licencjonowany na podstawie licencji zawartej w pliku [LICENCE](https://github.com/MattyMroz/mm_avh_working_space/blob/main/LICENSE) dostępnym w tym samym folderze co ten plik README.
 
 Zachęcam do zapoznania się z pełnym tekstem licencji, aby zrozumieć, jakie prawa i obowiązki wynikają z korzystania z **MM_AVH Working Space**.
 
