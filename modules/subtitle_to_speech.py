@@ -377,7 +377,7 @@ class SubtitleToSpeech:
 
     def merge_tts_audio(self) -> None:
         """
-        Merges the generated TTS audio files.
+            Merges the generated TTS audio files.
         """
         main_subs_files_dict: Dict[str, str] = self._get_files_dict(
             self.working_space_temp_main_subs)
