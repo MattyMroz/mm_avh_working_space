@@ -15,6 +15,7 @@ import re
 from contextlib import suppress
 from dataclasses import dataclass
 from os import listdir, path, remove, rename
+from shlex import quote
 from shutil import move
 from subprocess import Popen, call
 from typing import List, Dict, Callable, Optional
@@ -217,11 +218,13 @@ class MKVProcessing:
                 2:], '-c:v', 'libx264', '-crf', self.crf_value, '-preset', self.preset_value, '-c:a', 'aac', '-map', '0:v:0', '-map', '1:a:0']
 
             if path.exists(subtitle_file_srt):
-                command.extend(
-                    ['-vf', 'subtitles=' + subtitle_file_srt.replace("\\", "/")[2:]])
+                subtitle_path = quote(
+                    subtitle_file_srt.replace("\\", "/")[2:])
+                command.extend(['-vf', f'subtitles={subtitle_path}'])
             elif path.exists(subtitle_file_ass):
-                command.extend(
-                    ['-vf', 'subtitles=' + subtitle_file_ass.replace("\\", "/")[2:]])
+                subtitle_path = quote(
+                    subtitle_file_ass.replace("\\", "/")[2:])
+                command.extend(['-vf', f'subtitles={subtitle_path}'])
 
         elif path.exists(lector_file):
             command = [self.ffmpeg_path, '-y', '-i', path.join(self.working_space, new_filename), '-i', lector_file.replace(
@@ -232,11 +235,13 @@ class MKVProcessing:
                        '-c:v', 'libx264', '-crf', self.crf_value, '-preset', self.preset_value, '-c:a', 'copy']
 
             if path.exists(subtitle_file_srt):
-                command.extend(
-                    ['-vf', 'subtitles=' + subtitle_file_srt.replace("\\", "/")[2:]])
+                subtitle_path = quote(
+                    subtitle_file_srt.replace("\\", "/")[2:])
+                command.extend(['-vf', f'subtitles={subtitle_path}'])
             elif path.exists(subtitle_file_ass):
-                command.extend(
-                    ['-vf', 'subtitles=' + subtitle_file_ass.replace("\\", "/")[2:]])
+                subtitle_path = quote(
+                    subtitle_file_ass.replace("\\", "/")[2:])
+                command.extend(['-vf', f'subtitles={subtitle_path}'])
 
         command.append(output_file.replace("\\", "/")[2:])
 

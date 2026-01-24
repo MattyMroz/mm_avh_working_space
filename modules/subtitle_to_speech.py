@@ -32,8 +32,10 @@ from os import listdir, path, remove
 from subprocess import call, Popen
 from threading import Thread
 from time import sleep
+import sys
 import wave
-from asyncio import create_task, gather, run
+
+
 from typing import Dict, List, Optional
 
 import pyttsx3
@@ -51,6 +53,15 @@ from constants import (WORKING_SPACE,
                        FFMPEG_PATH,
                        console)
 from data.settings import Settings
+
+from asyncio import create_task, gather, run, Semaphore, sleep as asyncio_sleep, TimeoutError
+from async_timeout import timeout as timeout_scope
+from natsort import natsorted
+from os import path, stat, listdir, remove
+
+if sys.platform == "win32":
+    import asyncio
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 
 @dataclass(slots=True)
@@ -298,7 +309,10 @@ class SubtitleToSpeech:
         """
         communicate = Communicate(
             subtitle.text, voice, rate=rate, volume=volume)
-        await communicate.save(output_file)
+        with open(output_file, "wb") as file:
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    file.write(chunk["data"])
 
     async def generate_wav_files(self, subtitles: pysrt.SubRipFile, voice: str, rate: str, volume: str) -> List[str]:
         """
@@ -314,19 +328,38 @@ class SubtitleToSpeech:
                 - List[str]: The paths to the generated WAV files.
         """
         tasks = []
-        mp3_files = []
-        file_name = path.splitext(subtitles.path)[0]
+        mp3_files: List[str] = []
+        file_name: str = path.splitext(subtitles.path)[0]
+        # Zmniejszam liczbę równoległych połączeń
+        semaphore: Semaphore = Semaphore(1)
+        timeout: float = 30.0  # Dodaję timeout na połączenie
+
+        async def generate_with_retry(subtitle: pysrt.SubRipItem, output_file: str, max_retries: int = 3) -> None:
+            async with semaphore:
+                for attempt in range(max_retries):
+                    try:
+                        async with timeout_scope(timeout):
+                            await self.generate_speech(subtitle, voice, output_file, rate, volume)
+                            if path.exists(output_file) and stat(output_file).st_size > 0:
+                                return
+                            # Zwiększam czas oczekiwania między próbami
+                            await asyncio_sleep(2)
+                    except (TimeoutError, Exception) as e:
+                        if attempt == max_retries - 1:
+                            console.print(
+                                f"Failed to generate {output_file} after {max_retries} attempts: {e}", style="red_bold")
+                            raise
+                        # Zwiększam czas oczekiwania proporcjonalnie do liczby prób
+                        await asyncio_sleep(attempt * 2)
+
         for i, subtitle in enumerate(subtitles, start=1):
-            output_file = f"{file_name}_{i}.mp3"
+            output_file: str = f"{file_name}_{i}.mp3"
             mp3_files.append(output_file)
-            tasks.append(create_task(self.generate_speech(
-                subtitle, voice, output_file, rate, volume)))
-            if i % 50 == 0:
-                await gather(*tasks)
-                tasks = []
-                sleep(2)
+            tasks.append(create_task(
+                generate_with_retry(subtitle, output_file)))
+
         await gather(*tasks)
-        return mp3_files
+        return natsorted(mp3_files)
 
     def merge_audio_files(self, mp3_files: List[str], subtitles: pysrt.SubRipFile, dir_path: str) -> None:
         """
@@ -377,7 +410,7 @@ class SubtitleToSpeech:
 
     def merge_tts_audio(self) -> None:
         """
-            Merges the generated TTS audio files.
+        Merges the generated TTS audio files.
         """
         main_subs_files_dict: Dict[str, str] = self._get_files_dict(
             self.working_space_temp_main_subs)
@@ -456,7 +489,8 @@ class SubtitleToSpeech:
                 self.ffmpeg_path,
                 "-i", input_file_1,
                 "-i", input_file_2,
-                "-filter_complex", "[0:a]volume=7dB[a1];[a1][1:a]amix=inputs=2:duration=first",
+                "-filter_complex", "[0:a]volume=7dB[a1];[a1][1:a]amix=inputs=2:duration=longest",
+                "-c:a", "eac3",
                 output_file
             ]
         else:
@@ -464,10 +498,30 @@ class SubtitleToSpeech:
                 self.ffmpeg_path,
                 "-i", input_file_1,
                 "-i", input_file_2,
-                "-filter_complex", "[1:a]volume=7dB[a1];[0:a][a1]amix=inputs=2:duration=first",
+                "-filter_complex", "[1:a]volume=7dB[a1];[0:a][a1]amix=inputs=2:duration=longest",
+                "-c:a", "eac3",
                 output_file
             ]
         call(command)
+
+# Dla ELEVENLABS
+        # if 'main_subs' in input_file_1:
+        #     command: List[str] = [
+        #         self.ffmpeg_path,
+        #         "-i", input_file_1,
+        #         "-i", input_file_2,
+        #         "-filter_complex", "[0:a]volume=14dB[a1];[a1][1:a]amix=inputs=2:duration=longest",
+        #         output_file
+        #     ]
+        # else:
+        #     command: List[str] = [
+        #         self.ffmpeg_path,
+        #         "-i", input_file_1,
+        #         "-i", input_file_2,
+        #         "-filter_complex", "[1:a]volume=14dB[a1];[0:a][a1]amix=inputs=2:duration=longest",
+        #         output_file
+        #     ]
+        # call(command)
 
     def _convert_to_eac3(self, input_file: str, output_file: str):
         """

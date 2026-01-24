@@ -96,28 +96,68 @@ class SubtitleTranslator:
             Returns:
                 - pysrt.SubRipFile: The translated subtitle file.
         """
-        subs: pysrt.SubRipFile = pysrt.open(
-            path.join(dir_path, filename), encoding='utf-8')
-        subs_combined: List[str] = []
-        translated_subs: List[str] = []
+        subs: pysrt.SubRipFile = pysrt.open(path.join(dir_path, filename), encoding='utf-8')
+
+        SEPARATOR: str = "\u200B###\u200B"
+        NEWLINE_MARKER: str = "\u200B##\u200B"
 
         translator: Translator = Translator()
+        translated_subs: List[str] = []
+        subs_combined: List[str] = []
+
         for i, sub in enumerate(subs):
-            sub.text = sub.text.replace("\n", " ◍ ")
-            subs_combined.append(sub.text)
+            subs_combined.append(sub.text.replace("\n", NEWLINE_MARKER))
 
             if (i + 1) % translated_line_count == 0 or i == len(subs) - 1:
-                combined_text: str = "\n".join(subs_combined)
-                translated_text: str = translator.translate(
-                    combined_text, dest='pl').text
-                translated_subs += translated_text.split("\n")
+                combined_text: str = SEPARATOR.join(subs_combined)
+                translated_text: str = translator.translate(combined_text, dest='pl').text
+
+                translated_texts: List[str] = translated_text.split(SEPARATOR)
+
+                if len(translated_texts) != len(subs_combined):
+                    combined_text2: str = "\n".join(subs_combined)
+                    translated_text2: str = translator.translate(combined_text2, dest='pl').text
+                    translated_texts = translated_text2.split("\n")
+
+                if len(translated_texts) != len(subs_combined):
+                    translated_texts = []
+                    for single in subs_combined:
+                        t: str = translator.translate(single, dest='pl').text
+                        translated_texts.append(t)
+
+                if len(translated_texts) == len(subs_combined):
+                    for t in translated_texts:
+                        t = t.replace("\u200B", "")
+                        nl_plain = NEWLINE_MARKER.replace("\u200B", "")
+                        sep_plain = SEPARATOR.replace("\u200B", "")
+
+                        t = (t.replace(nl_plain + ", ", ",\n")
+                               .replace(nl_plain, "\n")
+                               .replace(NEWLINE_MARKER + ", ", ",\n")
+                               .replace(NEWLINE_MARKER, "\n")
+                               .replace(sep_plain, "\n")
+                               .replace("###", ""))
+
+                        t = re.sub(r"[ \t]+\n", "\n", t)
+                        t = re.sub(r"\n[ \t]+", "\n", t)
+                        t = t.strip()
+                        translated_subs.append(t)
+                else:
+                    for _ in subs_combined:
+                        translated_subs.append("")
+
                 subs_combined = []
 
+        # Assign translations back to subtitles (safeguard index errors)
+        if len(translated_subs) != len(subs):
+            console.print(f"Ostrzeżenie: liczba przetłumaczonych wierszy ({len(translated_subs)}) != oryginał ({len(subs)}). Przypisuję liniowo i uzupełniam brakujące.", style='yellow_bold')
+
         for i, sub in enumerate(subs):
-            sub.text = translated_subs[i]
-            sub.text = sub.text.replace(" ◍, ", ",\n")
-            sub.text = sub.text.replace(" ◍ ", "\n")
-            sub.text = sub.text.replace(" ◍", "")
+            if i < len(translated_subs):
+                sub.text = translated_subs[i]
+            else:
+                # fallback: leave original text if missing
+                sub.text = sub.text
 
         if is_combined_with_gpt:
             translated_filename: str = filename.replace(
