@@ -304,6 +304,7 @@ class SubtitleRefactor:
 
         # Usuń podwójne nowe linie i zamień je na pojedyncze spacje
         text = text.replace('\n\n', '\n').replace('\n', ' ')
+
         text = re.sub(r'\s+\.', '.', text)
 
         # Podziel tekst na początkowe chunki zgodnie z wybraną metodą
