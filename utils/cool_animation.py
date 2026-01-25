@@ -89,8 +89,11 @@ class CoolAnimation:
         """
             Helper method to check for user input and stop the animation.
         """
-        input()
-        self.stop_animation = True
+        try:
+            input()
+            self.stop_animation = True
+        except (EOFError, KeyboardInterrupt):
+            self.stop_animation = True
 
     def display(self) -> None:
         """
@@ -104,7 +107,7 @@ class CoolAnimation:
         count_time: int = 0
         i: int = 0
 
-        Thread(target=self.check_input).start()
+        Thread(target=self.check_input, daemon=True).start()
 
         while not self.stop_animation:
             sleep(0.075)

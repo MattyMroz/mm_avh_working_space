@@ -1,3 +1,4 @@
+import sys
 from msvcrt import getch
 from os import listdir, makedirs, path
 from shutil import rmtree
@@ -57,7 +58,11 @@ def ask_user(question: str) -> bool:
             bool: True if the user answers yes, False otherwise.
     """
     console.print(question, style='bold green', end=' ')
-    return input().lower() in ('t', 'y')
+    try:
+        return input().lower() in ('t', 'y')
+    except (EOFError, KeyboardInterrupt):
+        console.print('\n[red_bold]Program przerwany przez użytkownika.')
+        sys.exit(0)
 
 
 def update_settings() -> Settings:  # ✅
@@ -397,8 +402,13 @@ if __name__ == '__main__':
     directories: List[str] = [WORKING_SPACE, WORKING_SPACE_OUTPUT,
                               WORKING_SPACE_TEMP, WORKING_SPACE_TEMP_MAIN_SUBS, WORKING_SPACE_TEMP_ALT_SUBS]
     check_and_create_directories(directories)
-    main()
+    try:
+        main()
 
-    console.print(
-        '\n[green_italic]Naciśnij dowolny klawisz, aby zakończyć działanie programu...', end='')
-    getch()
+        console.print(
+            '\n[green_italic]Naciśnij dowolny klawisz, aby zakończyć działanie programu...', end='')
+        getch()
+    except (KeyboardInterrupt, EOFError):
+        console.print('\n[yellow_bold]Program zakończony.')
+        sys.exit(0)
+

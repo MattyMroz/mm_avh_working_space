@@ -30,6 +30,7 @@
 """
 
 import re
+from asyncio import run as asyncio_run
 from dataclasses import dataclass
 from msvcrt import getch
 from os import environ, listdir, path, remove
@@ -96,12 +97,21 @@ class SubtitleTranslator:
             Returns:
                 - pysrt.SubRipFile: The translated subtitle file.
         """
+        # Wrapper function to handle async googletrans v4+
+        async def _translate_async(text: str, dest: str = 'pl') -> str:
+            translator = Translator()
+            result = await translator.translate(text, dest=dest)
+            return result.text
+        
+        def translate_sync(text: str, dest: str = 'pl') -> str:
+            """Synchronous wrapper for async translate"""
+            return asyncio_run(_translate_async(text, dest))
+        
         subs: pysrt.SubRipFile = pysrt.open(path.join(dir_path, filename), encoding='utf-8')
 
         SEPARATOR: str = "\u200B###\u200B"
         NEWLINE_MARKER: str = "\u200B##\u200B"
 
-        translator: Translator = Translator()
         translated_subs: List[str] = []
         subs_combined: List[str] = []
 
@@ -110,19 +120,19 @@ class SubtitleTranslator:
 
             if (i + 1) % translated_line_count == 0 or i == len(subs) - 1:
                 combined_text: str = SEPARATOR.join(subs_combined)
-                translated_text: str = translator.translate(combined_text, dest='pl').text
+                translated_text: str = translate_sync(combined_text, dest='pl')
 
                 translated_texts: List[str] = translated_text.split(SEPARATOR)
 
                 if len(translated_texts) != len(subs_combined):
                     combined_text2: str = "\n".join(subs_combined)
-                    translated_text2: str = translator.translate(combined_text2, dest='pl').text
+                    translated_text2: str = translate_sync(combined_text2, dest='pl')
                     translated_texts = translated_text2.split("\n")
 
                 if len(translated_texts) != len(subs_combined):
                     translated_texts = []
                     for single in subs_combined:
-                        t: str = translator.translate(single, dest='pl').text
+                        t: str = translate_sync(single, dest='pl')
                         translated_texts.append(t)
 
                 if len(translated_texts) == len(subs_combined):
