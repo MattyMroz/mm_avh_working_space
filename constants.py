@@ -24,7 +24,7 @@
         - console: Instance of the Console class from the rich library, defined with various styles.
 """
 
-from os import getcwd, pardir, path
+from os import getcwd, pardir, path, environ
 from rich.console import Console
 from rich.theme import Theme
 
@@ -59,10 +59,22 @@ FFMPEG_FOLDER: str = path.join(
 )
 BALABOLKA_PATH: str = path.join(BALABOLKA_FOLDER, 'balcon.exe')
 FFMPEG_PATH: str = path.join(FFMPEG_FOLDER, 'ffmpeg.exe')
+FFPROBE_PATH: str = path.join(FFMPEG_FOLDER, 'ffprobe.exe')
 
+# Add FFmpeg directory to PATH so pydub can find it
+# This MUST be done before importing pydub
+if FFMPEG_FOLDER not in environ.get('PATH', ''):
+    environ['PATH'] = FFMPEG_FOLDER + ';' + environ.get('PATH', '')
+
+# Configure pydub to use local FFmpeg BEFORE any imports
+# This must be done before pydub is imported anywhere in the project
+from pydub import AudioSegment
+AudioSegment.converter = FFMPEG_PATH
+AudioSegment.ffmpeg = FFMPEG_PATH
+AudioSegment.ffprobe = FFPROBE_PATH
 
 # Rich print styles
-console: Console = Console(theme=Theme({
+console: Console = Console(color_system="truecolor", theme=Theme({
     "purple_bold": "purple bold",
     "purple_italic": "purple italic",
     "pink_bold": "pale_violet_red1 bold",

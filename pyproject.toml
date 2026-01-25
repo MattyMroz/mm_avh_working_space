@@ -1,0 +1,28 @@
+[project]
+name = "mm-avh-working-space"
+version = "2.0.0"
+description = "Multimedia Magic – Audio Visual Heaven - Zestaw narzędzi do przetwarzania multimediów, lektorowania i tworzenia audiobooków"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "async-timeout>=5.0.1",
+    "audioop-lts>=0.2.2",
+    "deepl>=1.27.0",
+    "edge-tts>=7.2.7",
+    "googletrans>=4.0.2",
+    "natsort>=8.4.0",
+    "nltk>=3.9.2",
+    "numpy>=2.4.1",
+    "opencv-python>=4.13.0.90",
+    "pyasstosrt>=1.5.0",
+    "pyautogui>=0.9.54",
+    "pydantic>=2.12.5",
+    "pydub>=0.25.1",
+    "pyperclip>=1.11.0",
+    "pysrt>=1.1.2",
+    "pysubs2>=1.8.0",
+    "pyttsx3>=2.99",
+    "rich>=14.3.0",
+    "scipy>=1.17.0",
+    "six>=1.17.0",
+]

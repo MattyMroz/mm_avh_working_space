@@ -3,20 +3,20 @@ import re
 
 class LatinPunctuator:
     def getParagraphs(self, text):
-        return self._recombine(re.split('((?:\r?\n\s*){2,})', text))
+        return self._recombine(re.split(r'((?:\r?\n\s*){2,})', text))
 
     def getSentences(self, text):
         # Dodano dodatkowe znaki interpunkcyjne do wyrażenia regularnego
-        return self._recombine(re.split('([.!?]+[\s\u200b]+|…\s+)', text), r'\b(\w|[A-Z][a-z]|Assn|Ave|Capt|Col|Comdr|Corp|Cpl|Gen|Gov|Hon|Inc|Lieut|Ltd|Rev|Mr|Ms|Mrs|Dr|No|Univ|Jan|Feb|Mar|Apr|Aug|Sept|Oct|Nov|Dec|dept|ed|est|vol|vs)\.\s+$')
+        return self._recombine(re.split(r'([.!?]+[\s\u200b]+|…\s+)', text), r'\b(\w|[A-Z][a-z]|Assn|Ave|Capt|Col|Comdr|Corp|Cpl|Gen|Gov|Hon|Inc|Lieut|Ltd|Rev|Mr|Ms|Mrs|Dr|No|Univ|Jan|Feb|Mar|Apr|Aug|Sept|Oct|Nov|Dec|dept|ed|est|vol|vs)\.\s+$')
 
     def getPhrases(self, sentence):
         # Dodano dodatkowe znaki interpunkcyjne do wyrażenia regularnego
-        return self._recombine(re.split('([,;:]\s+|\s-+\s+|—\s*|『|』|「|」|„|”|«|»|〈|〉|\[|\]|\(|\)|\{|\}|"|\.\.\.\s+|\*\s+|\'\s+)', sentence))
+        return self._recombine(re.split(r'([,;:]\s+|\s-+\s+|—\s*|『|』|「|」|„|"|«|»|〈|〉|\[|\]|\(|\)|\{|\}|"|\.\.\.\s+|\*\s+|\'\s+)', sentence))
 
     def getWords(self, sentence):
         # Dodano dodatkowe znaki interpunkcyjne do wyrażenia regularnego
         tokens = re.split(
-            '([~@#%^*_+=<>|\[\](){}"『』「」„”«»〈〉\.\.\.\*\'\']|[\s\-—/]+|\.(?=\w{2,})|,(?=[0-9]))', sentence.strip())
+            r'([~@#%^*_+=<>|\[\](){}"『』「」„"«»〈〉\.\.\.\*\'\']|[\s\-—/]+|\.(?=\w{2,})|,(?=[0-9]))', sentence.strip())
         result = []
         i = 0
         while i < len(tokens):

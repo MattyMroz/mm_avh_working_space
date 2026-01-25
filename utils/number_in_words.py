@@ -236,7 +236,7 @@ class NumberInWords:
                                 result += ' '
                             result += number_in_words
                         else:
-                            parts: List[str] = re.split('(\D)', number)
+                            parts: List[str] = re.split(r'(\D)', number)
                             for part in parts:
                                 if part.isdigit():
                                     number_in_words: str = self.number_in_words(
