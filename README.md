@@ -22,7 +22,7 @@
 | 🎬 Ekstrakcja | Wyciąganie audio i napisów z MKV |
 | 📝 Konwersja | ASS → SRT, podział według stylów |
 | 🌍 Tłumaczenie | Google Translate, DeepL, ChatGPT |
-| 🎤 Lektorowanie | Edge TTS, Ivona, Harpo, ElevenLabs |
+| 🎤 Lektorowanie | Edge TTS, Ivona, Harpo |
 | 📚 Audiobooki | Generowanie z TXT/SRT |
 | 🎥 Scalanie | MKV z lektorem lub wypalone MP4 |
 
@@ -69,7 +69,6 @@ mm_avh_working_space/
 | Marek | Edge TTS | Online (darmowy) |
 | Agnieszka | Ivona | Systemowy |
 | Zosia | Harpo | Systemowy |
-| * | ElevenLabs | [Colab](https://github.com/MattyMroz/11Labs_TTS_Colab_Shere) |
 
 ## ⚙️ Konfiguracja
 
