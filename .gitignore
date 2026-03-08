@@ -1,8 +1,205 @@
-*.exe
-*.mkv
-*.srt
-*.aas
+# =============================================================================
+# MM_AVH (Multimedia Magic – Audio Visual Heaven) - .gitignore
+# =============================================================================
+# Project: MM_AVH — Subtitle translation & TTS dubbing pipeline
+# Stack:   Python 3.14+ | pyttsx3 | edge-tts | pydub | rich
+# =============================================================================
+
+# --- Python -------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyo
+*.pyd
+.Python
+
+# --- Build & Distribution -----------------------------------------------------
+build/
+dist/
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+pip-log.txt
+pip-delete-this-directory.txt
+
+# --- Virtual Environments -----------------------------------------------------
+.venv/
+venv/
+ENV/
+env/
+# NOTE: .python-version and uv.lock SHOULD be committed
+
+# --- Testing & Coverage -------------------------------------------------------
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.artifacts/
+.tox/
+.nox/
+coverage.xml
+*.cover
+
+# --- IDE & Editor -------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.bak
+*.sublime-project
+*.sublime-workspace
+
+# --- Jupyter ------------------------------------------------------------------
+.ipynb_checkpoints/
+*.ipynb
+
+# --- OS Generated -------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# --- Environment Variables ----------------------------------------------------
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# --- Logs ---------------------------------------------------------------------
+logs/
+*.log
+*.log.*
+*.log.jsonl
+
+# --- Temporary Files ----------------------------------------------------------
+*.tmp
+*.temp
+*.cache
+
+# --- Images -------------------------------------------------------------------
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+*.tif
+*.webp
+*.svg
+*.ico
+*.heic
+*.heif
+
+# --- Video --------------------------------------------------------------------
 *.mp4
+*.avi
+*.mov
+*.mkv
+*.flv
+*.wmv
+*.webm
+
+# --- Audio --------------------------------------------------------------------
 *.mp3
+*.wav
+*.flac
+*.aac
+*.ogg
 *.eac3
+
+# --- AI/ML Model Weights -----------------------------------------------------
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+*.pt
+*.pth
+*.ckpt
+*.pb
+*.onnx
+*.tflite
+*.caffemodel
+*.weights
+*.safetensors
+*.msgpack
+*.bin
+
+# --- Data Files ---------------------------------------------------------------
+*.csv
+*.tsv
+*.dat
+*.npy
+*.npz
+*.parquet
+*.feather
+*.arrow
+
+# --- Archives -----------------------------------------------------------------
 *.zip
+*.tar
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.rar
+*.7z
+*.gz
+*.bz2
+
+# --- Database -----------------------------------------------------------------
+*.db
+*.sqlite
+*.sqlite3
+
+# --- Subtitle files (binary/generated) ----------------------------------------
+*.srt
+*.ass
+
+# --- Executables --------------------------------------------------------------
+*.exe
+*.lnk
+
+# =============================================================================
+# PROJECT-SPECIFIC RULES
+# =============================================================================
+
+# --- .github (Copilot AI agent configs — internal, not for VCS) ---------------
+.github/
+
+# --- Working Space (runtime I/O, user data) -----------------------------------
+# Keep ONLY folder structure (.gitkeep), ignore all media/subtitle files
+working_space/**
+!working_space/
+!working_space/**/
+!working_space/**/.gitkeep
+!working_space/output/
+!working_space/output/.gitkeep
+!working_space/temp/
+!working_space/temp/.gitkeep
+!working_space/temp/main_subs/
+!working_space/temp/main_subs/.gitkeep
+!working_space/temp/alt_subs/
+!working_space/temp/alt_subs/.gitkeep
+
+# --- Bin (external tools — large binaries) ------------------------------------
+bin/
+
+# --- Temp brainstorm files ----------------------------------------------------
+temp/
