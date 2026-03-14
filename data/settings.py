@@ -74,6 +74,14 @@ class Settings:
     tts: Optional[str] = None
     tts_speed: Optional[str] = None
     tts_volume: Optional[str] = None
+    fish_voice: Optional[str] = None
+    fish_temperature: Optional[str] = None
+    readlover_api_key: Optional[str] = None
+    readlover_speaker_id: Optional[str] = None
+    readlover_preset: Optional[str] = None
+    elevenbytes_voice: Optional[str] = None
+    pp_speed: Optional[str] = None
+    pp_volume: Optional[str] = None
     output: Optional[str] = None
 
     @classmethod
@@ -101,6 +109,8 @@ class Settings:
                 tts='TTS - Agnieszka - Ivona',
                 tts_speed='5',
                 tts_volume='65',
+                pp_speed='1.0',
+                pp_volume='0',
                 output='Oglądam w MM_AVH_Players (wynik: napisy i audio)'
             )
 
@@ -119,6 +129,7 @@ class Settings:
                 f'Niepoprawny format pliku {settings_path}', style='red_bold')
             return get_default_settings()
 
+        pp_defaults = Config.get_post_processing()
         return Settings(
             translator=data.get('translator'),
             deepl_api_key=data.get('deepl_api_key'),
@@ -127,6 +138,14 @@ class Settings:
             tts=data.get('tts'),
             tts_speed=data.get('tts_speed'),
             tts_volume=data.get('tts_volume'),
+            fish_voice=data.get('fish_voice'),
+            fish_temperature=data.get('fish_temperature'),
+            readlover_api_key=data.get('readlover_api_key'),
+            readlover_speaker_id=data.get('readlover_speaker_id'),
+            readlover_preset=data.get('readlover_preset'),
+            elevenbytes_voice=data.get('elevenbytes_voice'),
+            pp_speed=data.get('pp_speed', pp_defaults['default_pp_speed']),
+            pp_volume=data.get('pp_volume', pp_defaults['default_pp_volume']),
             output=data.get('output')
         )
 
@@ -405,6 +424,236 @@ class Settings:
         return tts_volume
 
     @staticmethod
+    def _get_fish_voice(settings: Optional['Settings']) -> Optional[str]:
+        """Fetch available voices from Fish Audio API and let user choose."""
+        try:
+            from modules.tts_fish_api import FishTTSClient
+            voices = FishTTSClient.get_voices_static()
+        except Exception as exc:
+            console.print(
+                f'\n[red_bold]Nie można pobrać głosów z Fish Audio API: {exc}')
+            console.print(
+                '[red_bold]Upewnij się, że serwer Fish Audio działa na http://127.0.0.1:8855')
+            return settings.fish_voice if settings else None
+
+        if not voices:
+            console.print(
+                '\n[red_bold]Brak dostępnych głosów w Fish Audio API.')
+            return settings.fish_voice if settings else None
+
+        console.print('\n[yellow_bold]Dostępne głosy Fish Audio:')
+        for i, voice in enumerate(voices):
+            console.print(
+                f'[yellow_bold]{i + 1}.[/yellow_bold] [white]{voice["name"]}')
+        console.print('Wybierz głos: ', style='green_bold', end='')
+        choice = input().strip()
+        if choice.isdigit():
+            idx = int(choice) - 1
+            if 0 <= idx < len(voices):
+                selected = voices[idx]['name']
+                console.print(f'Wybrano głos: {selected}', style='yellow_bold')
+                return selected
+        console.print(
+            'Niepoprawny wybór. Nie zmieniono wartości!', style='red_bold')
+        return settings.fish_voice if settings else None
+
+    @staticmethod
+    def _get_fish_temperature(settings: Optional['Settings']) -> Optional[str]:
+        """Prompt user for Fish Audio temperature (0.0-1.0)."""
+        default = settings.fish_temperature if settings and settings.fish_temperature else '0.8'
+        console.print(
+            '\n[yellow_bold]Temperature Fish Audio (ekspresyjność głosu):')
+        console.print(
+            '  Zakres: 0.0 (monotonny) — 1.0 (ekspresyjny), domyślna: 0.8')
+        console.print('Wpisz temperature: ', style='green_bold', end='')
+        choice = input().strip()
+        if choice:
+            try:
+                val = float(choice)
+                if 0.0 <= val <= 1.0:
+                    return choice
+            except ValueError:
+                pass
+            console.print(
+                'Niepoprawna wartość. Używam domyślnej wartości.', style='red_bold')
+        return default
+
+    @staticmethod
+    def _get_readlover_api_key(settings: Optional['Settings']) -> Optional[str]:
+        """Prompt user for ReadLover API key."""
+        console.print(
+            '\nCzy chcesz ustawić klucz API ReadLover?', style='yellow_bold')
+        console.print('(T lub Y - tak): ', style='green_bold', end='')
+        if input().lower() in ('t', 'y'):
+            console.print(
+                'Klucz API ReadLover (format: rl_live_...)', style='yellow_bold')
+            console.print('Podaj klucz API ReadLover: ',
+                          style='green_bold', end='')
+            api_key = input().strip()
+            if api_key:
+                return api_key
+            console.print(
+                'Niepoprawna wartość. Nie zmieniono wartości!', style='red_bold')
+        return settings.readlover_api_key if settings else None
+
+    @staticmethod
+    def _get_readlover_voice(settings: Optional['Settings'], api_key: Optional[str]) -> Optional[str]:
+        """Fetch available voices from ReadLover API and let user choose."""
+        if not api_key:
+            console.print(
+                '\n[red_bold]Brak klucza API ReadLover — nie można pobrać głosów.')
+            return settings.readlover_speaker_id if settings else None
+        try:
+            from modules.tts_readlover import ReadLoverClient
+            voices = ReadLoverClient.get_voices_static(api_key)
+        except Exception as exc:
+            console.print(
+                f'\n[red_bold]Nie można pobrać głosów z ReadLover API: {exc}')
+            return settings.readlover_speaker_id if settings else None
+
+        if not voices:
+            console.print(
+                '\n[red_bold]Brak dostępnych głosów w ReadLover API.')
+            return settings.readlover_speaker_id if settings else None
+
+        console.print('\n[yellow_bold]Dostępne głosy ReadLover:')
+        for i, voice in enumerate(voices):
+            lang = voice.get('language', '')
+            console.print(
+                f'[yellow_bold]{i + 1}.[/yellow_bold] [white]{voice["name"]} ({lang})')
+        console.print('Wybierz głos: ', style='green_bold', end='')
+        choice = input().strip()
+        if choice.isdigit():
+            idx = int(choice) - 1
+            if 0 <= idx < len(voices):
+                selected_id = str(voices[idx]['id'])
+                console.print(
+                    f'Wybrano głos: {voices[idx]["name"]}', style='yellow_bold')
+                return selected_id
+        console.print(
+            'Niepoprawny wybór. Nie zmieniono wartości!', style='red_bold')
+        return settings.readlover_speaker_id if settings else None
+
+    @staticmethod
+    def _get_readlover_preset(settings: Optional['Settings']) -> Optional[str]:
+        """Prompt user for ReadLover preset (neutral/expressive)."""
+        default = settings.readlover_preset if settings and settings.readlover_preset else 'neutral'
+        console.print('\n[yellow_bold]Preset ReadLover:')
+        console.print('  1. neutral (domyślny)')
+        console.print('  2. expressive')
+        console.print('Wybierz preset: ', style='green_bold', end='')
+        choice = input().strip()
+        if choice == '1' or choice.lower() == 'neutral':
+            return 'neutral'
+        if choice == '2' or choice.lower() == 'expressive':
+            return 'expressive'
+        if not choice:
+            return default
+        console.print(
+            'Niepoprawny wybór. Używam domyślnego.', style='red_bold')
+        return default
+
+    @staticmethod
+    def _get_elevenbytes_voice(settings: Optional['Settings']) -> Optional[str]:
+        """Fetch available voices from ElevenBytes and let user choose or add custom."""
+        try:
+            from modules.tts_elevenbytes import TTS as ElevenBytesTTS, VOICES
+        except Exception as exc:
+            console.print(
+                f'\n[red_bold]Nie można zaimportować ElevenBytes: {exc}')
+            return settings.elevenbytes_voice if settings else None
+
+        voices = ElevenBytesTTS.list_voices()
+        voice_list = list(voices.items())
+
+        console.print('\n[yellow_bold]Dostępne głosy ElevenBytes (ElevenLabs):')
+        for i, (alias, (name, voice_id)) in enumerate(voice_list):
+            console.print(
+                f'[yellow_bold]{i + 1}.[/yellow_bold] [white]{name} ({alias})')
+        add_idx = len(voice_list) + 1
+        console.print(
+            f'[yellow_bold]{add_idx}.[/yellow_bold] [white]➕ Dodaj nowy głos (voice_id z ElevenLabs)')
+        console.print('Wybierz głos: ', style='green_bold', end='')
+        choice = input().strip()
+
+        if choice.isdigit():
+            idx = int(choice) - 1
+            if 0 <= idx < len(voice_list):
+                alias = voice_list[idx][0]
+                console.print(
+                    f'Wybrano głos: {voice_list[idx][1][0]}', style='yellow_bold')
+                return alias
+            if int(choice) == add_idx:
+                console.print(
+                    'Podaj voice_id z ElevenLabs: ', style='green_bold', end='')
+                voice_id = input().strip()
+                if not voice_id:
+                    console.print(
+                        'Pusty voice_id. Nie zmieniono wartości!', style='red_bold')
+                    return settings.elevenbytes_voice if settings else None
+                console.print(
+                    'Podaj nazwę głosu (np. "Rachel — Calm"): ', style='green_bold', end='')
+                voice_name = input().strip() or f'Custom ({voice_id[:8]}...)'
+                alias = voice_id
+                ElevenBytesTTS.add_voice(alias, voice_name, voice_id)
+                console.print(
+                    f'Dodano i wybrano głos: {voice_name}', style='yellow_bold')
+                return alias
+
+        console.print(
+            'Niepoprawny wybór. Nie zmieniono wartości!', style='red_bold')
+        return settings.elevenbytes_voice if settings else None
+
+    @staticmethod
+    def _is_valid_pp_speed(speed: str) -> bool:
+        """Check if post-processing speed value is valid (0.5-3.0)."""
+        try:
+            val = float(speed)
+            return 0.5 <= val <= 3.0
+        except ValueError:
+            return False
+
+    @staticmethod
+    def _is_valid_pp_volume(volume: str) -> bool:
+        """Check if post-processing volume value is valid (dB number)."""
+        try:
+            float(volume)
+            return True
+        except ValueError:
+            return False
+
+    @staticmethod
+    def _get_pp_speed(settings: Optional['Settings']) -> Optional[str]:
+        """Prompt user for post-processing speed (atempo)."""
+        pp_config = Config.get_post_processing()
+        default = pp_config['default_pp_speed']
+        console.print(f'\n[yellow_bold]Post-processing (FFmpeg) — niezależne od modelu TTS:')
+        console.print(f'  {pp_config["description_speed"]}')
+        console.print('Wpisz przyspieszenie lektora (atempo): ', style='green_bold', end='')
+        choice = input().strip()
+        if choice and Settings._is_valid_pp_speed(choice):
+            return choice
+        if not choice:
+            return settings.pp_speed if settings and settings.pp_speed else default
+        console.print('Niepoprawna wartość. Używam domyślnej wartości.', style='red_bold')
+        return default
+
+    @staticmethod
+    def _get_pp_volume(settings: Optional['Settings']) -> Optional[str]:
+        """Prompt user for post-processing volume (dB)."""
+        pp_config = Config.get_post_processing()
+        default = pp_config['default_pp_volume']
+        console.print(f'  {pp_config["description_volume"]}')
+        console.print('Wpisz zmianę głośności lektora (dB): ', style='green_bold', end='')
+        choice = input().strip()
+        if choice and Settings._is_valid_pp_volume(choice):
+            return choice
+        if not choice:
+            return settings.pp_volume if settings and settings.pp_volume else default
+        console.print('Niepoprawna wartość. Używam domyślnej wartości.', style='red_bold')
+        return default
+
+    @staticmethod
     def _get_output(settings: Optional['Settings']) -> Optional[str]:
         """
             Prompt the user to choose an output option or retrieve it from the user settings.
@@ -445,6 +694,14 @@ class Settings:
         console.print(f'\nWybrałeś: {tts}', style='yellow_bold')
         tts_speed = Settings._get_tts_speed(tts, default_speed)
         tts_volume = Settings._get_tts_volume(tts, default_volume)
+        fish_voice = Settings._get_fish_voice(settings) if tts == 'TTS - Fish Audio API' else (settings.fish_voice if settings else None)
+        fish_temperature = Settings._get_fish_temperature(settings) if tts == 'TTS - Fish Audio API' else (settings.fish_temperature if settings else None)
+        readlover_api_key = Settings._get_readlover_api_key(settings) if tts == 'TTS - ReadLover API' else (settings.readlover_api_key if settings else None)
+        readlover_speaker_id = Settings._get_readlover_voice(settings, readlover_api_key) if tts == 'TTS - ReadLover API' else (settings.readlover_speaker_id if settings else None)
+        readlover_preset = Settings._get_readlover_preset(settings) if tts == 'TTS - ReadLover API' else (settings.readlover_preset if settings else None)
+        elevenbytes_voice = Settings._get_elevenbytes_voice(settings) if tts == 'TTS - ElevenBytes' else (settings.elevenbytes_voice if settings else None)
+        pp_speed = Settings._get_pp_speed(settings)
+        pp_volume = Settings._get_pp_volume(settings)
         output = Settings._get_output(settings)
 
         return Settings(
@@ -455,6 +712,14 @@ class Settings:
             tts=tts,
             tts_speed=tts_speed,
             tts_volume=tts_volume,
+            fish_voice=fish_voice,
+            fish_temperature=fish_temperature,
+            readlover_api_key=readlover_api_key,
+            readlover_speaker_id=readlover_speaker_id,
+            readlover_preset=readlover_preset,
+            elevenbytes_voice=elevenbytes_voice,
+            pp_speed=pp_speed,
+            pp_volume=pp_volume,
             output=output
         )
 

@@ -148,7 +148,69 @@ class Config:
                     'default_voice_volume': 'auto',
                 },
             },
+            {
+                'name': 'TTS - STylish - PL',
+                'description': {
+                    'speed': 'Szybkość głosu od 0.5 do 2.0, domyślna: 1.0',
+                    'volume': 'Głośność głosu: Auto',
+                },
+                'default_options': {
+                    'default_voice_speed': '1.0',
+                    'default_voice_volume': 'auto',
+                },
+            },
+            {
+                'name': 'TTS - Fish Audio API',
+                'description': {
+                    'speed': 'Szybkość głosu: Auto (kontrolowana przez temperature)',
+                    'volume': 'Głośność głosu: Auto',
+                },
+                'default_options': {
+                    'default_voice_speed': 'auto',
+                    'default_voice_volume': 'auto',
+                },
+            },
+            {
+                'name': 'TTS - ReadLover API',
+                'description': {
+                    'speed': 'Szybkość głosu (length_scale) od 0.1 do 4.0, domyślna: 1.0',
+                    'volume': 'Głośność głosu: Auto',
+                },
+                'default_options': {
+                    'default_voice_speed': '1.0',
+                    'default_voice_volume': 'auto',
+                },
+            },
+            {
+                'name': 'TTS - ElevenBytes',
+                'description': {
+                    'speed': 'Szybkość głosu: Auto',
+                    'volume': 'Głośność głosu: Auto',
+                },
+                'default_options': {
+                    'default_voice_speed': 'auto',
+                    'default_voice_volume': 'auto',
+                },
+            },
         ]
+
+    @staticmethod
+    def get_post_processing() -> Dict[str, str]:
+        """Returns post-processing configuration for FFmpeg speed/volume adjustment.
+
+        These settings are independent of any TTS model and are applied
+        AFTER the TTS engine generates the audio file.
+
+        Returns:
+            Dict with keys: description_speed, description_volume,
+            default_pp_speed, default_pp_volume.
+        """
+        return {
+            'description_speed': 'Przyspieszenie lektora (atempo) od 0.5 do 3.0, domyślna: 1.0 (bez zmiany)',
+            'description_volume': 'Zmiana głośności lektora w dB (np. 0, 5, -3), domyślna: 0 (bez zmiany)',
+            'default_pp_speed': '1.0',
+            'default_pp_volume': '0',
+        }
 
     @staticmethod
     def get_output() -> List[Dict[str, str]]:
