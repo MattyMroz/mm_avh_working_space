@@ -757,19 +757,21 @@ class SubtitleToSpeech:
                 else:
                     print("Immediate next round...", flush=True)
 
-        # ── Phase 3: Build WAV timeline from cache ──
-        with wave.open(output_file, 'wb') as wav_file:
-            wav_file.setnchannels(1)
-            wav_file.setsampwidth(2)
-            wav_file.setframerate(ELEVENBYTES_SAMPLE_RATE)
+        # ── Phase 3: Build RAW PCM timeline from cache to bypass 4GB WAV limit ──
+        raw_pcm_path = output_file.replace(".wav", ".pcm")
+        flac_path = output_file.replace(".wav", ".flac")
 
+        current_samples: int = 0
+
+        with open(raw_pcm_path, 'wb') as pcm_file:
             for idx, start_time, text in sub_items:
-                framerate: int = wav_file.getframerate()
-                nframes: int = wav_file.getnframes()
-                current_time: float = nframes / float(framerate)
+                framerate: int = ELEVENBYTES_SAMPLE_RATE
+                current_time: float = current_samples / float(framerate)
+
                 if start_time > current_time:
                     empty_frames: int = int((start_time - current_time) * framerate)
-                    wav_file.writeframes(b'\x00' * empty_frames * 2)
+                    pcm_file.write(b'\x00' * empty_frames * 2)
+                    current_samples += empty_frames
 
                 mp3_path = cache_dir / f"{idx:04d}.mp3"
                 if not mp3_path.exists():
@@ -784,7 +786,24 @@ class SubtitleToSpeech:
                     audio_int16 = self._pp_speed_audio(audio_int16, ELEVENBYTES_SAMPLE_RATE)
 
                 if len(audio_int16) > 0:
-                    wav_file.writeframes(audio_int16.tobytes())
+                    pcm_file.write(audio_int16.tobytes())
+                    current_samples += len(audio_int16)
+
+        # Konwersja surowego PCM na .wav z flagą -rf64 auto (pozwala na WAV > 4GB)
+        call([
+            self.ffmpeg_path, "-y", "-loglevel", "quiet",
+            "-f", "s16le", "-ar", str(ELEVENBYTES_SAMPLE_RATE), "-ac", "1",
+            "-i", raw_pcm_path,
+            "-c:a", "pcm_s16le", "-rf64", "auto",
+            output_file
+        ])
+
+        try:
+            import os
+            if os.path.exists(raw_pcm_path):
+                os.remove(raw_pcm_path)
+        except Exception:
+            pass
 
         try:
             tts.close_sync()
