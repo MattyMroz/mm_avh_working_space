@@ -110,6 +110,7 @@ class SubtitleToSpeech:
     working_space_temp_alt_subs: str = WORKING_SPACE_TEMP_ALT_SUBS
     balabolka_path: str = BALABOLKA_PATH
     ffmpeg_path: str = FFMPEG_PATH
+    _pp_speed: float = 1.0
 
     def ansi_srt(self) -> None:
         """
@@ -188,6 +189,8 @@ class SubtitleToSpeech:
                     f"{i}\n{subtitle.start.to_time().strftime('%H:%M:%S.%f')[:-3]} --> {subtitle.end.to_time().strftime('%H:%M:%S.%f')[:-3]}\n{subtitle.text}\n")
                 start_time: float = subtitle.start.ordinal / 1000.0
                 self._save_subtitle_to_wav(engine, subtitle.text)
+                if self._pp_speed != 1.0:
+                    self._pp_speed_file(path.join(self.working_space_temp, "temp.wav"))
                 self._add_empty_frame_if_needed(wav_file, start_time)
                 self._add_subtitle_to_wav(wav_file)
 
@@ -257,6 +260,10 @@ class SubtitleToSpeech:
             self.process_subtitle(subtitle)
 
         command_thread.join()
+
+        # Balabolka generates whole WAV at once — per-subtitle speed extraction
+        if self._pp_speed != 1.0 and path.isfile(output_wav_path):
+            self._pp_speed_whole_wav(output_wav_path, subtitles)
 
     def _prepare_balabolka_command(self, balcon_path: str, file_path: str, output_wav_path: str, tts_speed: str, tts_volume: str) -> List[str]:
         """
@@ -405,8 +412,589 @@ class SubtitleToSpeech:
             self.working_space_temp_main_subs, self.filename), encoding='ANSI')
         mp3_files: List[str] = run(self.generate_wav_files(
             subtitles, voice, tts_speed, tts_volume))
+        if self._pp_speed != 1.0:
+            for mp3_file in mp3_files:
+                mp3_path = path.join(self.working_space_temp_main_subs, path.basename(mp3_file)) if not path.isabs(mp3_file) else mp3_file
+                if path.isfile(mp3_path):
+                    self._pp_speed_file(mp3_path)
         self.merge_audio_files(mp3_files, subtitles,
                                self.working_space_temp_main_subs)
+
+    def srt_to_wav_stylish(self, tts_speed: str, tts_volume: str) -> None:
+        """Converts the subtitle file to a WAV audio file using STylish-TTS-Pl.
+
+        Args:
+            tts_speed: Speed multiplier as string (e.g. '1.0'). Range 0.5-2.0.
+            tts_volume: Volume (unused, kept for interface consistency).
+        """
+        from modules.tts_stylish import StylishTTS, STYLISH_SAMPLE_RATE
+
+        self.ansi_srt()
+        subtitles: pysrt.SubRipFile = pysrt.open(path.join(
+            self.working_space_temp_main_subs, self.filename), encoding='ANSI')
+        output_file: str = path.splitext(path.join(
+            self.working_space_temp_main_subs, self.filename))[0] + '.wav'
+
+        speed = float(tts_speed) if tts_speed not in ('auto', '') else 1.0
+        tts = StylishTTS()
+
+        with wave.open(output_file, 'wb') as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(STYLISH_SAMPLE_RATE)
+
+            for i, subtitle in enumerate(subtitles, start=1):
+                print(
+                    f"{i}\n{subtitle.start.to_time().strftime('%H:%M:%S.%f')[:-3]} --> "
+                    f"{subtitle.end.to_time().strftime('%H:%M:%S.%f')[:-3]}\n{subtitle.text}\n")
+                start_time: float = subtitle.start.ordinal / 1000.0
+
+                audio_int16 = tts.synthesize_long(subtitle.text, speed=speed)
+
+                if self._pp_speed != 1.0 and len(audio_int16) > 0:
+                    audio_int16 = self._pp_speed_audio(audio_int16, STYLISH_SAMPLE_RATE)
+
+                framerate: int = wav_file.getframerate()
+                nframes: int = wav_file.getnframes()
+                current_time: float = nframes / float(framerate)
+                if start_time > current_time:
+                    empty_frames: int = int((start_time - current_time) * framerate)
+                    wav_file.writeframes(b'\x00' * empty_frames * 2)
+
+                if len(audio_int16) > 0:
+                    wav_file.writeframes(audio_int16.tobytes())
+
+    def srt_to_wav_fish_api(self, tts_speed: str, tts_volume: str, fish_voice: Optional[str] = None, fish_temperature: float = 0.8) -> None:
+        """Converts the subtitle file to a WAV audio file using Fish Audio S2 Pro API.
+
+        Args:
+            tts_speed: Unused (auto), kept for interface consistency.
+            tts_volume: Unused (auto), kept for interface consistency.
+            fish_voice: Name of the voice profile to use.
+            fish_temperature: Temperature for expressiveness (0.0-1.0).
+        """
+        from modules.tts_fish_api import FishTTSClient, FISH_SAMPLE_RATE
+
+        self.ansi_srt()
+        subtitles: pysrt.SubRipFile = pysrt.open(path.join(
+            self.working_space_temp_main_subs, self.filename), encoding='ANSI')
+        output_file: str = path.splitext(path.join(
+            self.working_space_temp_main_subs, self.filename))[0] + '.wav'
+
+        client = FishTTSClient(voice=fish_voice, temperature=fish_temperature)
+
+        with wave.open(output_file, 'wb') as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(FISH_SAMPLE_RATE)
+
+            for i, subtitle in enumerate(subtitles, start=1):
+                print(
+                    f"{i}\n{subtitle.start.to_time().strftime('%H:%M:%S.%f')[:-3]} --> "
+                    f"{subtitle.end.to_time().strftime('%H:%M:%S.%f')[:-3]}\n{subtitle.text}\n")
+                start_time: float = subtitle.start.ordinal / 1000.0
+
+                audio_int16 = client.synthesize(subtitle.text)
+
+                if self._pp_speed != 1.0 and len(audio_int16) > 0:
+                    audio_int16 = self._pp_speed_audio(audio_int16, FISH_SAMPLE_RATE)
+
+                framerate: int = wav_file.getframerate()
+                nframes: int = wav_file.getnframes()
+                current_time: float = nframes / float(framerate)
+                if start_time > current_time:
+                    empty_frames: int = int((start_time - current_time) * framerate)
+                    wav_file.writeframes(b'\x00' * empty_frames * 2)
+
+                if len(audio_int16) > 0:
+                    wav_file.writeframes(audio_int16.tobytes())
+
+    def srt_to_wav_readlover(
+        self,
+        tts_speed: str,
+        tts_volume: str,
+        readlover_api_key: str,
+        readlover_speaker_id: int = 6,
+        readlover_preset: str = "neutral",
+    ) -> None:
+        """Converts the subtitle file to a WAV audio file using ReadLover API.
+
+        Args:
+            tts_speed: length_scale value (0.1-4.0).
+            tts_volume: Unused (auto), kept for interface consistency.
+            readlover_api_key: Bearer API key for ReadLover.
+            readlover_speaker_id: Speaker ID from /v1/voices.
+            readlover_preset: 'neutral' or 'expressive'.
+        """
+        from modules.tts_readlover import ReadLoverClient, READLOVER_SAMPLE_RATE
+
+        length_scale = 1.0
+        try:
+            val = float(tts_speed)
+            if 0.1 <= val <= 4.0:
+                length_scale = val
+        except (ValueError, TypeError):
+            pass
+
+        self.ansi_srt()
+        subtitles: pysrt.SubRipFile = pysrt.open(path.join(
+            self.working_space_temp_main_subs, self.filename), encoding='ANSI')
+        output_file: str = path.splitext(path.join(
+            self.working_space_temp_main_subs, self.filename))[0] + '.wav'
+
+        client = ReadLoverClient(
+            api_key=readlover_api_key,
+            speaker_id=readlover_speaker_id,
+            preset=readlover_preset,
+            length_scale=length_scale,
+        )
+
+        with wave.open(output_file, 'wb') as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(READLOVER_SAMPLE_RATE)
+
+            for i, subtitle in enumerate(subtitles, start=1):
+                print(
+                    f"{i}\n{subtitle.start.to_time().strftime('%H:%M:%S.%f')[:-3]} --> "
+                    f"{subtitle.end.to_time().strftime('%H:%M:%S.%f')[:-3]}\n{subtitle.text}\n")
+                start_time: float = subtitle.start.ordinal / 1000.0
+
+                audio_int16 = client.synthesize(subtitle.text)
+
+                if self._pp_speed != 1.0 and len(audio_int16) > 0:
+                    audio_int16 = self._pp_speed_audio(audio_int16, READLOVER_SAMPLE_RATE)
+
+                framerate: int = wav_file.getframerate()
+                nframes: int = wav_file.getnframes()
+                current_time: float = nframes / float(framerate)
+                if start_time > current_time:
+                    empty_frames: int = int((start_time - current_time) * framerate)
+                    wav_file.writeframes(b'\x00' * empty_frames * 2)
+
+                if len(audio_int16) > 0:
+                    wav_file.writeframes(audio_int16.tobytes())
+
+    def srt_to_wav_elevenbytes(self, tts_speed: str, tts_volume: str, elevenbytes_voice: Optional[str] = None) -> None:
+        """Async parallel batch synthesis via ElevenBytes (ElevenLabs proxy).
+
+        Saves each MP3 to disk cache so progress survives crashes.
+        On restart, loads existing MP3s and retries only missing ones.
+
+        Args:
+            tts_speed: Unused (auto), kept for interface consistency.
+            tts_volume: Unused (auto), kept for interface consistency.
+            elevenbytes_voice: Voice alias or raw ElevenLabs voice_id.
+        """
+        import re
+        import sys
+        import time as _time
+        from io import BytesIO
+        from pathlib import Path as _Path
+        from modules.tts_elevenbytes import TTS as ElevenBytesTTS
+        import numpy as np
+
+        # Force unbuffered stdout for real-time terminal visibility
+        if hasattr(sys.stdout, 'reconfigure'):
+            sys.stdout.reconfigure(line_buffering=True)
+
+        ELEVENBYTES_SAMPLE_RATE: int = 44100
+        HARD_TIMEOUT_S: float = 5 * 60 * 60  # 5h absolute limit
+        ROUND_COOLDOWN: float = 10.0
+
+        self.ansi_srt()
+        subtitles: pysrt.SubRipFile = pysrt.open(path.join(
+            self.working_space_temp_main_subs, self.filename), encoding='ANSI')
+        output_file: str = path.splitext(path.join(
+            self.working_space_temp_main_subs, self.filename))[0] + '.wav'
+
+        # MP3 cache dir — survives crashes
+        cache_dir = _Path(self.working_space_temp_main_subs) / "_elevenbytes_cache"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+        tts = ElevenBytesTTS(default_voice=elevenbytes_voice or 'dallin')
+
+        # ── Phase 1: Parse & clean all subtitles ──
+        sub_items: list[tuple[int, float, str]] = []
+        for i, subtitle in enumerate(subtitles):
+            text: str = subtitle.text.strip()
+            text = re.sub(r'\{[^}]*\}', '', text)
+            text = re.sub(r'<[^>]+>', '', text)
+            text = text.replace('\\N', ' ').replace('\\n', ' ')
+            text = re.sub(r'\s+', ' ', text).strip()
+            start_time: float = subtitle.start.ordinal / 1000.0
+            sub_items.append((i, start_time, text))
+
+        # Print all subtitles like original SRT display
+        for i, (idx, st, text) in enumerate(sub_items, start=1):
+            sub = subtitles[idx]
+            print(
+                f"{i}/{len(sub_items)}  "
+                f"{sub.start.to_time().strftime('%H:%M:%S.%f')[:-3]} --> "
+                f"{sub.end.to_time().strftime('%H:%M:%S.%f')[:-3]}  "
+                f"{text[:80]}", flush=True)
+
+        # ── Phase 1.5: Load cached MP3s from previous runs ──
+        cached_indices: set[int] = set()
+        for mp3_file in cache_dir.glob("*.mp3"):
+            try:
+                idx = int(mp3_file.stem)
+                if mp3_file.stat().st_size >= 1024:
+                    cached_indices.add(idx)
+            except (ValueError, OSError):
+                pass
+
+        synthable: list[tuple[int, str]] = [
+            (idx, text) for idx, _, text in sub_items if len(text) >= 2
+        ]
+        total_to_synth: int = len(synthable)
+
+        if cached_indices:
+            console.print(
+                f"[cyan bold]ElevenBytes cache: {len(cached_indices)} "
+                f"MP3s loaded from previous run"
+            )
+
+        pending: list[tuple[int, str]] = [
+            (idx, text) for idx, text in synthable if idx not in cached_indices
+        ]
+
+        print(
+            f"\nElevenBytes: {len(sub_items)} parsed, "
+            f"{len(cached_indices)} cached, "
+            f"{len(pending)} to synthesize",
+            flush=True,
+        )
+
+        # ── Phase 2: Parallel with real-time output — retry until 100% or 5h ──
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        import threading
+
+        t_start: float = _time.monotonic()
+        round_num: int = 0
+        done_count: int = len(cached_indices)
+        _print_lock = threading.Lock()
+        CONCURRENCY: int = 85
+
+        def _synth_one(orig_idx: int, text: str) -> tuple[int, str, bytes | None, str | None, float]:
+            """Synthesize single subtitle. Returns (idx, text, audio|None, error|None, elapsed)."""
+            t0 = _time.monotonic()
+            try:
+                mp3 = tts.synthesize_sync(text)
+                return (orig_idx, text, mp3, None, _time.monotonic() - t0)
+            except Exception as exc:
+                return (orig_idx, text, None, str(exc), _time.monotonic() - t0)
+
+        while pending:
+            elapsed: float = _time.monotonic() - t_start
+            if elapsed >= HARD_TIMEOUT_S:
+                console.print(
+                    f"[red bold]ElevenBytes: 5h timeout — "
+                    f"{done_count}/{total_to_synth} done, "
+                    f"{len(pending)} still pending."
+                )
+                break
+
+            round_num += 1
+            remaining_m: float = (HARD_TIMEOUT_S - elapsed) / 60.0
+
+            print(f"\n{'=' * 60}", flush=True)
+            print(
+                f"ElevenBytes round {round_num} — {len(pending)} requests "
+                f"(concurrency={CONCURRENCY}) | done: {done_count}/{total_to_synth} "
+                f"| remaining: {remaining_m:.0f}min",
+                flush=True,
+            )
+            print(f"{'=' * 60}", flush=True)
+
+            new_pending: list[tuple[int, str]] = []
+            round_ok: int = 0
+
+            with ThreadPoolExecutor(max_workers=CONCURRENCY) as pool:
+                future_map = {
+                    pool.submit(_synth_one, idx, text): (idx, text)
+                    for idx, text in pending
+                }
+                for future in as_completed(future_map):
+                    orig_idx, orig_text, audio, error, elapsed_s = future.result()
+                    sub = subtitles[orig_idx]
+                    time_range = (
+                        f"{sub.start.to_time().strftime('%H:%M:%S.%f')[:-3]} --> "
+                        f"{sub.end.to_time().strftime('%H:%M:%S.%f')[:-3]}"
+                    )
+                    if audio and len(audio) >= 1024:
+                        (cache_dir / f"{orig_idx:04d}.mp3").write_bytes(audio)
+                        done_count += 1
+                        round_ok += 1
+                        kb = len(audio) / 1024
+                        with _print_lock:
+                            print(
+                                f"  OK  #{orig_idx + 1:>3}  {time_range}  "
+                                f"{kb:.0f}KB  {elapsed_s:.1f}s  "
+                                f"[{done_count}/{total_to_synth}]  {orig_text[:50]}",
+                                flush=True,
+                            )
+                    else:
+                        new_pending.append((orig_idx, orig_text))
+                        with _print_lock:
+                            print(
+                                f"  FAIL #{orig_idx + 1:>3}  {time_range}  "
+                                f"{error or 'too small'}  {orig_text[:50]}",
+                                flush=True,
+                            )
+
+            print(
+                f"\nRound {round_num}: {round_ok}/{len(pending)} OK | "
+                f"Total: {done_count}/{total_to_synth}",
+                flush=True,
+            )
+
+            pending = new_pending
+            if pending:
+                if round_ok == 0:
+                    print(f"API down — cooldown {ROUND_COOLDOWN:.0f}s...", flush=True)
+                    _time.sleep(ROUND_COOLDOWN)
+                else:
+                    print("Immediate next round...", flush=True)
+
+        # ── Phase 3: Build RAW PCM timeline from cache to bypass 4GB WAV limit ──
+        raw_pcm_path = output_file.replace(".wav", ".pcm")
+        flac_path = output_file.replace(".wav", ".flac")
+
+        current_samples: int = 0
+
+        with open(raw_pcm_path, 'wb') as pcm_file:
+            for idx, start_time, text in sub_items:
+                framerate: int = ELEVENBYTES_SAMPLE_RATE
+                current_time: float = current_samples / float(framerate)
+
+                if start_time > current_time:
+                    empty_frames: int = int((start_time - current_time) * framerate)
+                    pcm_file.write(b'\x00' * empty_frames * 2)
+                    current_samples += empty_frames
+
+                mp3_path = cache_dir / f"{idx:04d}.mp3"
+                if not mp3_path.exists():
+                    continue
+
+                mp3_bytes: bytes = mp3_path.read_bytes()
+                audio_seg = AudioSegment.from_mp3(BytesIO(mp3_bytes))
+                audio_seg = audio_seg.set_channels(1).set_frame_rate(ELEVENBYTES_SAMPLE_RATE).set_sample_width(2)
+                audio_int16 = np.frombuffer(audio_seg.raw_data, dtype=np.int16)
+
+                if self._pp_speed != 1.0 and len(audio_int16) > 0:
+                    audio_int16 = self._pp_speed_audio(audio_int16, ELEVENBYTES_SAMPLE_RATE)
+
+                if len(audio_int16) > 0:
+                    pcm_file.write(audio_int16.tobytes())
+                    current_samples += len(audio_int16)
+
+        # Konwersja surowego PCM na .wav z flagą -rf64 auto (pozwala na WAV > 4GB)
+        call([
+            self.ffmpeg_path, "-y", "-loglevel", "quiet",
+            "-f", "s16le", "-ar", str(ELEVENBYTES_SAMPLE_RATE), "-ac", "1",
+            "-i", raw_pcm_path,
+            "-c:a", "pcm_s16le", "-rf64", "auto",
+            output_file
+        ])
+
+        try:
+            import os
+            if os.path.exists(raw_pcm_path):
+                os.remove(raw_pcm_path)
+        except Exception:
+            pass
+
+        try:
+            tts.close_sync()
+        except Exception:
+            pass
+
+        # Clean up MP3 cache after successful WAV build
+        import shutil as _shutil
+        _shutil.rmtree(cache_dir, ignore_errors=True)
+
+        # ── Summary ──
+        total_elapsed: float = _time.monotonic() - t_start
+        failed_count: int = total_to_synth - done_count
+        if failed_count:
+            console.print(
+                f"[yellow bold]ElevenBytes: {failed_count}/{total_to_synth} "
+                f"nie udało się (rounds={round_num}, time={total_elapsed / 60:.1f}min)."
+            )
+        else:
+            console.print(
+                f"[green bold]ElevenBytes: {done_count}/{total_to_synth} "
+                f"— 100%! (rounds={round_num}, time={total_elapsed / 60:.1f}min)"
+            )
+
+    def _pp_speed_file(self, file_path: str) -> None:
+        """Applies atempo to a single audio file in-place. No-op if _pp_speed is 1.0."""
+        if self._pp_speed == 1.0 or not path.isfile(file_path):
+            return
+        base, ext = path.splitext(file_path)
+        tmp = base + '_pp_tmp' + ext
+        filters = ",".join(self._build_atempo_chain(self._pp_speed))
+        call([
+            self.ffmpeg_path, "-y", "-loglevel", "quiet",
+            "-i", file_path, "-af", filters, tmp,
+        ])
+        if path.isfile(tmp):
+            remove(file_path)
+            from os import rename
+            rename(tmp, file_path)
+
+    def _pp_speed_audio(self, audio_int16, sample_rate: int):
+        """Applies atempo to a numpy int16 audio array via FFmpeg temp file."""
+        import numpy as np
+        tmp_in = path.join(self.working_space_temp, "pp_speed_in.wav")
+        tmp_out = path.join(self.working_space_temp, "pp_speed_out.wav")
+        with wave.open(tmp_in, 'wb') as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(sample_rate)
+            wf.writeframes(audio_int16.tobytes())
+        filters = ",".join(self._build_atempo_chain(self._pp_speed))
+        call([
+            self.ffmpeg_path, "-y", "-loglevel", "quiet",
+            "-i", tmp_in, "-af", filters,
+            "-c:a", "pcm_s16le", tmp_out,
+        ])
+        if path.isfile(tmp_out):
+            with wave.open(tmp_out, 'rb') as rf:
+                result = np.frombuffer(rf.readframes(rf.getnframes()), dtype=np.int16)
+            remove(tmp_out)
+        else:
+            result = audio_int16
+        if path.isfile(tmp_in):
+            remove(tmp_in)
+        return result
+
+    def _pp_speed_whole_wav(self, wav_path: str, subtitles: pysrt.SubRipFile) -> None:
+        """Per-subtitle atempo for engines that generate the whole WAV at once (e.g. Balabolka)."""
+        with wave.open(wav_path, 'rb') as wf:
+            nchannels = wf.getnchannels()
+            sampwidth = wf.getsampwidth()
+            framerate = wf.getframerate()
+            all_frames = wf.readframes(wf.getnframes())
+
+        bps = sampwidth * nchannels
+        bytes_per_sec = framerate * bps
+        total_bytes = len(all_frames)
+        total_ms = (total_bytes / bps / framerate) * 1000.0
+        atempo_filters = ",".join(self._build_atempo_chain(self._pp_speed))
+
+        clips: List[tuple] = []
+        for i, subtitle in enumerate(subtitles):
+            start_ms = subtitle.start.ordinal
+            end_ms = subtitles[i + 1].start.ordinal if i + 1 < len(subtitles) else int(total_ms)
+
+            sb = int(start_ms / 1000.0 * bytes_per_sec)
+            eb = min(int(end_ms / 1000.0 * bytes_per_sec), total_bytes)
+            sb -= sb % bps
+            eb -= eb % bps
+            if sb >= eb:
+                continue
+
+            tmp_in = path.join(self.working_space_temp, "bal_pp_in.wav")
+            tmp_out = path.join(self.working_space_temp, "bal_pp_out.wav")
+            with wave.open(tmp_in, 'wb') as cf:
+                cf.setnchannels(nchannels)
+                cf.setsampwidth(sampwidth)
+                cf.setframerate(framerate)
+                cf.writeframes(all_frames[sb:eb])
+
+            call([
+                self.ffmpeg_path, "-y", "-loglevel", "quiet",
+                "-i", tmp_in, "-af", atempo_filters,
+                "-c:a", "pcm_s16le", tmp_out,
+            ])
+
+            if path.isfile(tmp_out):
+                with wave.open(tmp_out, 'rb') as sf:
+                    clips.append((start_ms, sf.readframes(sf.getnframes())))
+                remove(tmp_out)
+            if path.isfile(tmp_in):
+                remove(tmp_in)
+
+        with wave.open(wav_path, 'wb') as wf:
+            wf.setnchannels(nchannels)
+            wf.setsampwidth(sampwidth)
+            wf.setframerate(framerate)
+            for start_ms, clip_bytes in clips:
+                cur = wf.getnframes() / float(framerate)
+                gap = start_ms / 1000.0 - cur
+                if gap > 0:
+                    wf.writeframes(b'\x00' * int(gap * framerate) * bps)
+                wf.writeframes(clip_bytes)
+
+    @staticmethod
+    def _build_atempo_chain(speed: float) -> List[str]:
+        """Builds a chain of atempo filters for FFmpeg.
+
+        The atempo filter accepts values in [0.5, 100.0]. For speeds outside
+        the comfortable 0.5-2.0 range, we chain multiple filters.
+
+        Args:
+            speed: Desired speed multiplier (0.5-100.0).
+
+        Returns:
+            List of atempo filter strings to chain.
+        """
+        filters: List[str] = []
+        remaining = max(0.5, min(speed, 100.0))
+        while remaining > 2.0:
+            filters.append("atempo=2.0")
+            remaining /= 2.0
+        while remaining < 0.5:
+            filters.append("atempo=0.5")
+            remaining /= 0.5
+        filters.append(f"atempo={remaining:.4f}")
+        return filters
+
+    def _ffmpeg_post_process(
+        self, input_path: str, output_path: str,
+        tts_speed: str, tts_volume: str,
+    ) -> None:
+        """Applies speed and volume adjustment via FFmpeg without pitch change.
+
+        Args:
+            input_path: Path to the raw WAV file.
+            output_path: Path for the processed WAV file.
+            tts_speed: Speed multiplier as string (e.g. '1.0').
+            tts_volume: Volume adjustment in dB as string (e.g. '0', '7').
+        """
+        speed = float(tts_speed) if tts_speed not in ('auto', '') else 1.0
+        volume_db = float(tts_volume) if tts_volume not in ('auto', '', '0') else 0.0
+
+        filters: List[str] = []
+
+        if speed != 1.0:
+            filters.extend(self._build_atempo_chain(speed))
+
+        if volume_db != 0.0:
+            filters.append(f"volume={volume_db:.1f}dB")
+
+        if not filters:
+            # No processing needed — just rename
+            from shutil import move
+            move(input_path, output_path)
+            return
+
+        filter_str = ",".join(filters)
+        command: List[str] = [
+            self.ffmpeg_path,
+            "-y",
+            "-i", input_path,
+            "-af", filter_str,
+            "-c:a", "pcm_s16le",
+            output_path,
+        ]
+        console.print(
+            f"FFmpeg post-processing: speed={speed}, volume={volume_db}dB",
+            style='blue_bold',
+        )
+        call(command)
 
     def merge_tts_audio(self) -> None:
         """
@@ -548,8 +1136,9 @@ class SubtitleToSpeech:
                 - file_name (str): The name of the files to remove.
         """
         for file in listdir(directory):
-            if path.splitext(file)[0] == file_name:
-                remove(path.join(directory, file))
+            full = path.join(directory, file)
+            if path.isfile(full) and path.splitext(file)[0] == file_name:
+                remove(full)
 
     def generate_audio(self, settings: Settings):
         """
@@ -561,6 +1150,13 @@ class SubtitleToSpeech:
         tts: Optional[str] = settings.tts
         tts_speed: Optional[str] = settings.tts_speed
         tts_volume: Optional[str] = settings.tts_volume
+        self._pp_speed = float(getattr(settings, 'pp_speed', None) or '1.0')
+
+        if self._pp_speed != 1.0:
+            console.print(
+                f"Post-processing: atempo={self._pp_speed} (per subtitle)",
+                style='blue_bold',
+            )
 
         console.print("Rozpoczynam generowanie pliku audio...",
                       style='green_bold', end=' ')
@@ -571,10 +1167,63 @@ class SubtitleToSpeech:
             self.srt_to_wav_balabolka(tts_speed, tts_volume)
         elif tts in ["TTS - Zofia - Edge", "TTS - Marek - Edge"]:
             self.srt_to_wav_edge_online(tts, tts_speed, tts_volume)
+        elif tts == "TTS - STylish - PL":
+            self.srt_to_wav_stylish(tts_speed, tts_volume)
+        elif tts == "TTS - Fish Audio API":
+            fish_temp = float(settings.fish_temperature or '0.8')
+            self.srt_to_wav_fish_api(tts_speed, tts_volume, fish_voice=settings.fish_voice, fish_temperature=fish_temp)
+        elif tts == "TTS - ReadLover API":
+            self.srt_to_wav_readlover(
+                tts_speed,
+                tts_volume,
+                readlover_api_key=settings.readlover_api_key or '',
+                readlover_speaker_id=int(settings.readlover_speaker_id or '6'),
+                readlover_preset=settings.readlover_preset or 'neutral',
+            )
+        elif tts == "TTS - ElevenBytes":
+            self.srt_to_wav_elevenbytes(
+                tts_speed,
+                tts_volume,
+                elevenbytes_voice=settings.elevenbytes_voice,
+            )
         console.print(
             "Generowanie pliku audio zakończone.", style='green_bold')
 
+        self._apply_post_processing(settings)
         self.merge_tts_audio()
+
+    def _apply_post_processing(self, settings: Settings) -> None:
+        """Applies FFmpeg volume adjustment to the whole generated WAV.
+
+        Speed (atempo) is already applied per subtitle during generation.
+        This method only handles volume.
+        """
+        pp_volume_str = getattr(settings, 'pp_volume', None) or '0'
+        volume_db = float(pp_volume_str)
+
+        if volume_db == 0.0:
+            return
+
+        wav_path = path.splitext(path.join(
+            self.working_space_temp_main_subs, self.filename))[0] + '.wav'
+
+        if not path.isfile(wav_path):
+            return
+
+        console.print(
+            f"FFmpeg post-processing: volume={volume_db}dB",
+            style='blue_bold',
+        )
+        raw_path = wav_path + '.pre_vol'
+        from shutil import move
+        move(wav_path, raw_path)
+        call([
+            self.ffmpeg_path, "-y", "-loglevel", "quiet",
+            "-i", raw_path,
+            "-af", f"volume={volume_db:.1f}dB",
+            "-c:a", "pcm_s16le", wav_path,
+        ])
+        remove(raw_path)
 
     def srt_to_eac3_elevenlabs(self) -> None:
         """
