@@ -675,6 +675,7 @@ class SubtitleToSpeech:
         done_count: int = len(cached_indices)
         _print_lock = threading.Lock()
         CONCURRENCY: int = 85
+        consecutive_zero: int = 0
 
         def _synth_one(orig_idx: int, text: str) -> tuple[int, str, bytes | None, str | None, float]:
             """Synthesize single subtitle. Returns (idx, text, audio|None, error|None, elapsed)."""
@@ -752,9 +753,16 @@ class SubtitleToSpeech:
             pending = new_pending
             if pending:
                 if round_ok == 0:
-                    print(f"API down — cooldown {ROUND_COOLDOWN:.0f}s...", flush=True)
-                    _time.sleep(ROUND_COOLDOWN)
+                    consecutive_zero += 1
+                    cooldown = min(30.0 * (2 ** (consecutive_zero - 1)), 300.0)
+                    print(
+                        f"API blocked — cooldown {cooldown:.0f}s "
+                        f"(zero rounds: {consecutive_zero})...",
+                        flush=True,
+                    )
+                    _time.sleep(cooldown)
                 else:
+                    consecutive_zero = 0
                     print("Immediate next round...", flush=True)
 
         # ── Phase 3: Build RAW PCM timeline from cache to bypass 4GB WAV limit ──
