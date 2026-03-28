@@ -57,8 +57,8 @@ MIN_CHARS: int = 2
 MIN_AUDIO_BYTES: int = 1024
 DEFAULT_VOICE: str = "dallin"
 DEFAULT_CONCURRENCY: int = 100
-DEFAULT_TIMEOUT: float = 180.0
-DEFAULT_MAX_RETRIES: int = 3
+DEFAULT_TIMEOUT: float = 30.0
+DEFAULT_MAX_RETRIES: int = 100
 RETRY_BACKOFF_BASE: float = 2.0
 RETRY_STATUS_CODES: frozenset[int] = frozenset({403, 429, 502, 503, 504})
 SUPPORTED_FORMATS: frozenset[str] = frozenset({"mp3", "wav", "ogg", "flac"})
@@ -153,14 +153,33 @@ class TTS:
         self._default_voice = default_voice
         self._output_dir = Path(output_dir) if output_dir else None
         self._max_retries = max_retries
-        self._sem = asyncio.Semaphore(concurrency)
+        self._concurrency = concurrency
+        self._sem: asyncio.Semaphore | None = None
         transport = httpx.AsyncHTTPTransport(retries=2)
         self._client = httpx.AsyncClient(
             transport=transport,
             timeout=httpx.Timeout(timeout, connect=10.0),
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/131.0.0.0 Safari/537.36"
+                ),
+                "Referer": "https://teamsp.org/xi/tts.html",
+                "Origin": "https://teamsp.org",
+                "Accept": "*/*",
+                "Accept-Language": "en-US,en;q=0.9,pl;q=0.8",
+            },
         )
         self._sync_loop: asyncio.AbstractEventLoop | None = None
         self._sync_thread: threading.Thread | None = None
+
+    def _get_sem(self) -> asyncio.Semaphore:
+        """Lazy-init semaphore bound to the current running event loop."""
+        loop = asyncio.get_running_loop()
+        if self._sem is None or self._sem._loop is not loop:  # type: ignore[attr-defined]
+            self._sem = asyncio.Semaphore(self._concurrency)
+        return self._sem
 
     # ── Async API ──────────────────────────────────────────────────────────
 
@@ -191,7 +210,7 @@ class TTS:
         self._validate_format(fmt)
         voice_id = self._resolve_voice(voice or self._default_voice)
 
-        async with self._sem:
+        async with self._get_sem():
             mp3_data = await self._request_with_retry(text, voice_id)
 
         if fmt == "mp3":
@@ -379,7 +398,7 @@ class TTS:
                 last_status = resp.status_code
 
                 if resp.status_code in RETRY_STATUS_CODES:
-                    wait = RETRY_BACKOFF_BASE * attempt
+                    wait = min(RETRY_BACKOFF_BASE * attempt, 5.0)
                     last_err = f"HTTP {resp.status_code}"
                     if attempt < self._max_retries:
                         log.warning(
@@ -401,7 +420,7 @@ class TTS:
             except httpx.TimeoutException:
                 last_err = "timeout"
                 if attempt < self._max_retries:
-                    wait = RETRY_BACKOFF_BASE * attempt
+                    wait = min(RETRY_BACKOFF_BASE * attempt, 5.0)
                     log.warning("Timeout — retry %d/%d, backoff %.0fs", attempt, self._max_retries, wait)
                     await asyncio.sleep(wait)
                     continue
@@ -429,7 +448,7 @@ class TTS:
             self._validate_text(text)
             voice_id = self._resolve_voice(voice or self._default_voice)
 
-            async with self._sem:
+            async with self._get_sem():
                 mp3_data = await self._request_with_retry(text, voice_id)
 
             audio = mp3_data if fmt == "mp3" else self._convert_audio(mp3_data, fmt)
@@ -521,4 +540,8 @@ class TTS:
         """Run async coroutine from sync context using persistent event loop."""
         loop = self._ensure_sync_loop()
         future = asyncio.run_coroutine_threadsafe(coro, loop)  # type: ignore[arg-type]
-        return future.result()
+        try:
+            return future.result(timeout=3600.0)
+        except concurrent.futures.TimeoutError:
+            future.cancel()
+            raise TTSAPIError("Request timed out after 3600s — event loop blocked")
