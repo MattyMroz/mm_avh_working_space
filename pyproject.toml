@@ -40,6 +40,7 @@ dependencies = [
     "transformers>=5.3.0",
     "monotonic-align",
     "nvidia-ml-py>=13.590.48",
+    "types-requests>=2.33.0.20260408",
 ]
 
 [tool.uv.sources]

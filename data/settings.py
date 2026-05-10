@@ -76,13 +76,41 @@ class Settings:
     tts_volume: Optional[str] = None
     fish_voice: Optional[str] = None
     fish_temperature: Optional[str] = None
-    readlover_api_key: Optional[str] = None
+    readlover_api_key: Optional[str | List[str]] = None
     readlover_speaker_id: Optional[str] = None
     readlover_preset: Optional[str] = None
     elevenbytes_voice: Optional[str] = None
     pp_speed: Optional[str] = None
     pp_volume: Optional[str] = None
     output: Optional[str] = None
+
+    @staticmethod
+    def _normalize_readlover_api_keys(api_keys: Optional[str | List[str]]) -> List[str]:
+        """Normalize one or many ReadLover API keys into a de-duplicated list."""
+        if api_keys is None:
+            return []
+
+        if isinstance(api_keys, str):
+            raw_keys = api_keys.replace(',', '\n').replace(';', '\n').splitlines()
+        else:
+            raw_keys = [str(value) for value in api_keys]
+
+        normalized_keys: List[str] = []
+        for raw_key in raw_keys:
+            cleaned_key = raw_key.strip()
+            if cleaned_key and cleaned_key not in normalized_keys:
+                normalized_keys.append(cleaned_key)
+        return normalized_keys
+
+    @staticmethod
+    def _coerce_readlover_api_keys(api_keys: Optional[str | List[str]]) -> Optional[str | List[str]]:
+        """Return None, one key, or a list of keys depending on input."""
+        normalized_keys = Settings._normalize_readlover_api_keys(api_keys)
+        if not normalized_keys:
+            return None
+        if len(normalized_keys) == 1:
+            return normalized_keys[0]
+        return normalized_keys
 
     @classmethod
     def load_from_file(cls, settings_path: str = SETTINGS_PATH) -> 'Settings':
@@ -140,7 +168,7 @@ class Settings:
             tts_volume=data.get('tts_volume'),
             fish_voice=data.get('fish_voice'),
             fish_temperature=data.get('fish_temperature'),
-            readlover_api_key=data.get('readlover_api_key'),
+            readlover_api_key=Settings._coerce_readlover_api_keys(data.get('readlover_api_key')),
             readlover_speaker_id=data.get('readlover_speaker_id'),
             readlover_preset=data.get('readlover_preset'),
             elevenbytes_voice=data.get('elevenbytes_voice'),
@@ -479,25 +507,25 @@ class Settings:
         return default
 
     @staticmethod
-    def _get_readlover_api_key(settings: Optional['Settings']) -> Optional[str]:
+    def _get_readlover_api_key(settings: Optional['Settings']) -> Optional[str | List[str]]:
         """Prompt user for ReadLover API key."""
         console.print(
             '\nCzy chcesz ustawić klucz API ReadLover?', style='yellow_bold')
         console.print('(T lub Y - tak): ', style='green_bold', end='')
         if input().lower() in ('t', 'y'):
             console.print(
-                'Klucz API ReadLover (format: rl_live_...)', style='yellow_bold')
-            console.print('Podaj klucz API ReadLover: ',
+                'Klucze API ReadLover (format: rl_live_..., wiele kluczy oddziel przecinkiem)', style='yellow_bold')
+            console.print('Podaj klucz lub klucze API ReadLover: ',
                           style='green_bold', end='')
-            api_key = input().strip()
-            if api_key:
-                return api_key
+            api_keys = Settings._coerce_readlover_api_keys(input().strip())
+            if api_keys:
+                return api_keys
             console.print(
                 'Niepoprawna wartość. Nie zmieniono wartości!', style='red_bold')
-        return settings.readlover_api_key if settings else None
+        return Settings._coerce_readlover_api_keys(settings.readlover_api_key) if settings else None
 
     @staticmethod
-    def _get_readlover_voice(settings: Optional['Settings'], api_key: Optional[str]) -> Optional[str]:
+    def _get_readlover_voice(settings: Optional['Settings'], api_key: Optional[str | List[str]]) -> Optional[str]:
         """Fetch available voices from ReadLover API and let user choose."""
         if not api_key:
             console.print(
@@ -518,7 +546,7 @@ class Settings:
 
         console.print('\n[yellow_bold]Dostępne głosy ReadLover:')
         for i, voice in enumerate(voices):
-            lang = voice.get('language', '')
+            lang = voice.get('language_name') or voice.get('language', '')
             console.print(
                 f'[yellow_bold]{i + 1}.[/yellow_bold] [white]{voice["name"]} ({lang})')
         console.print('Wybierz głos: ', style='green_bold', end='')

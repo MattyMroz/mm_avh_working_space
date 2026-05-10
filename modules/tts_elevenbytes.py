@@ -68,6 +68,8 @@ SUPPORTED_FORMATS: frozenset[str] = frozenset({"mp3", "wav", "ogg", "flac"})
 
 VOICES: dict[str, tuple[str, str]] = {
     "dallin": ("Dallin — Storyteller", "alFofuDn3cOwyoz1i44T"),
+    "sabine": ("Sabine — Fun and Dynamic Narrator", "BBz8H3kffyIUs3SYExlh"),
+    "tim": ("Tim — Clear, English and Neutral", "FxZjRiAEBESrb7srpme7")
 }
 
 

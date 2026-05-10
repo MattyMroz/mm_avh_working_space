@@ -513,7 +513,7 @@ class SubtitleToSpeech:
         self,
         tts_speed: str,
         tts_volume: str,
-        readlover_api_key: str,
+        readlover_api_key: str | List[str],
         readlover_speaker_id: int = 6,
         readlover_preset: str = "neutral",
     ) -> None:
@@ -522,11 +522,24 @@ class SubtitleToSpeech:
         Args:
             tts_speed: length_scale value (0.1-4.0).
             tts_volume: Unused (auto), kept for interface consistency.
-            readlover_api_key: Bearer API key for ReadLover.
+            readlover_api_key: Bearer API key or ordered list of fallback keys.
             readlover_speaker_id: Speaker ID from /v1/voices.
             readlover_preset: 'neutral' or 'expressive'.
         """
-        from modules.tts_readlover import ReadLoverClient, READLOVER_SAMPLE_RATE
+        import re
+        import shutil as _shutil
+        import threading
+        import time as _time
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from pathlib import Path as _Path
+
+        from modules.tts_readlover import (
+            READLOVER_CONCURRENCY_PER_API_KEY,
+            READLOVER_MAX_CONCURRENCY,
+            READLOVER_MIN_CONCURRENCY,
+            READLOVER_SAMPLE_RATE,
+            ReadLoverClient,
+        )
 
         length_scale = 1.0
         try:
@@ -542,6 +555,9 @@ class SubtitleToSpeech:
         output_file: str = path.splitext(path.join(
             self.working_space_temp_main_subs, self.filename))[0] + '.wav'
 
+        cache_dir = _Path(self.working_space_temp_main_subs) / "_readlover_cache"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
         client = ReadLoverClient(
             api_key=readlover_api_key,
             speaker_id=readlover_speaker_id,
@@ -549,31 +565,167 @@ class SubtitleToSpeech:
             length_scale=length_scale,
         )
 
+        key_count = len(readlover_api_key) if isinstance(readlover_api_key, list) else 1
+        concurrency = max(
+            READLOVER_MIN_CONCURRENCY,
+            min(READLOVER_MAX_CONCURRENCY, key_count * READLOVER_CONCURRENCY_PER_API_KEY),
+        )
+        hard_timeout_s = 2 * 60 * 60
+        max_retries = 3
+        print_lock = threading.Lock()
+
+        sub_items: List[tuple[int, float, str]] = []
+        for idx, subtitle in enumerate(subtitles):
+            text = subtitle.text.strip()
+            text = re.sub(r'\{[^}]*\}', '', text)
+            text = re.sub(r'<[^>]+>', '', text)
+            text = text.replace('\\N', ' ').replace('\\n', ' ')
+            text = re.sub(r'\s+', ' ', text).strip()
+            start_time: float = subtitle.start.ordinal / 1000.0
+            sub_items.append((idx, start_time, text))
+
+        cached_indices: set[int] = set()
+        for cache_file in cache_dir.glob('*.wav'):
+            try:
+                idx = int(cache_file.stem)
+                if cache_file.stat().st_size >= 1024:
+                    cached_indices.add(idx)
+            except (ValueError, OSError):
+                continue
+
+        pending: List[tuple[int, str]] = [
+            (idx, text)
+            for idx, _, text in sub_items
+            if len(text) >= 2 and idx not in cached_indices
+        ]
+        done_count = len(cached_indices)
+        total_to_synth = len([text for _, _, text in sub_items if len(text) >= 2])
+        round_num = 0
+        start_ts = _time.monotonic()
+
+        if cached_indices:
+            console.print(
+                f"[cyan bold]ReadLover cache: {len(cached_indices)} WAVs loaded from previous run"
+            )
+
+        def synthesize_to_cache(sub_idx: int, text: str) -> tuple[int, str | None, float]:
+            worker = ReadLoverClient(
+                api_key=readlover_api_key,
+                speaker_id=client.speaker_id,
+                language_id=client.language_id,
+                espeak_language=client.espeak_language,
+                preset=readlover_preset,
+                length_scale=length_scale,
+                resolve_speaker_id=False,
+                check_server=False,
+            )
+            worker_started = _time.monotonic()
+            audio_int16 = worker.synthesize(text)
+            if len(audio_int16) == 0:
+                return sub_idx, 'empty audio', _time.monotonic() - worker_started
+
+            chunk_path = cache_dir / f'{sub_idx:04d}.wav'
+            with wave.open(str(chunk_path), 'wb') as chunk_wav:
+                chunk_wav.setnchannels(1)
+                chunk_wav.setsampwidth(2)
+                chunk_wav.setframerate(READLOVER_SAMPLE_RATE)
+                chunk_wav.writeframes(audio_int16.tobytes())
+            return sub_idx, None, _time.monotonic() - worker_started
+
+        while pending:
+            if _time.monotonic() - start_ts >= hard_timeout_s:
+                console.print(
+                    f"[red bold]ReadLover: timeout — {done_count}/{total_to_synth} done, {len(pending)} pending."
+                )
+                break
+
+            round_num += 1
+            console.print(
+                f"[blue bold]ReadLover round {round_num}: {len(pending)} requests (concurrency={concurrency})"
+            )
+            next_pending: List[tuple[int, str]] = []
+            round_ok = 0
+
+            with ThreadPoolExecutor(max_workers=concurrency) as pool:
+                future_map = {
+                    pool.submit(synthesize_to_cache, idx, text): (idx, text)
+                    for idx, text in pending
+                }
+                for future in as_completed(future_map):
+                    idx, text = future_map[future]
+                    subtitle = subtitles[idx]
+                    time_range = (
+                        f"{subtitle.start.to_time().strftime('%H:%M:%S.%f')[:-3]} --> "
+                        f"{subtitle.end.to_time().strftime('%H:%M:%S.%f')[:-3]}"
+                    )
+                    try:
+                        result_idx, error, elapsed_s = future.result()
+                    except Exception as exc:
+                        next_pending.append((idx, text))
+                        with print_lock:
+                            print(
+                                f"  FAIL #{idx + 1:>3}  {time_range}  {exc}  {text[:50]}",
+                                flush=True,
+                            )
+                        continue
+
+                    if error is None:
+                        done_count += 1
+                        round_ok += 1
+                        with print_lock:
+                            print(
+                                f"  OK  #{result_idx + 1:>3}  {time_range}  {elapsed_s:.1f}s  "
+                                f"[{done_count}/{total_to_synth}]  {text[:50]}",
+                                flush=True,
+                            )
+                    else:
+                        next_pending.append((idx, text))
+                        with print_lock:
+                            print(
+                                f"  FAIL #{idx + 1:>3}  {time_range}  {error}  {text[:50]}",
+                                flush=True,
+                            )
+
+            if round_ok == 0:
+                max_retries -= 1
+                if max_retries <= 0:
+                    pending = next_pending
+                    break
+                _time.sleep(5.0)
+
+            pending = next_pending
+
+        if self._pp_speed != 1.0:
+            for idx, _, text in sub_items:
+                if len(text) < 2:
+                    continue
+                chunk_path = cache_dir / f'{idx:04d}.wav'
+                if path.isfile(chunk_path):
+                    self._pp_speed_file(str(chunk_path))
+
         with wave.open(output_file, 'wb') as wav_file:
             wav_file.setnchannels(1)
             wav_file.setsampwidth(2)
             wav_file.setframerate(READLOVER_SAMPLE_RATE)
 
-            for i, subtitle in enumerate(subtitles, start=1):
+            for i, (idx, start_time, text) in enumerate(sub_items, start=1):
+                subtitle = subtitles[idx]
                 print(
                     f"{i}\n{subtitle.start.to_time().strftime('%H:%M:%S.%f')[:-3]} --> "
-                    f"{subtitle.end.to_time().strftime('%H:%M:%S.%f')[:-3]}\n{subtitle.text}\n")
-                start_time: float = subtitle.start.ordinal / 1000.0
+                    f"{subtitle.end.to_time().strftime('%H:%M:%S.%f')[:-3]}\n{text}\n")
+                self._add_empty_frame_if_needed(wav_file, start_time)
 
-                audio_int16 = client.synthesize(subtitle.text)
+                chunk_path = cache_dir / f'{idx:04d}.wav'
+                if not path.isfile(chunk_path):
+                    console.print(
+                        f"[yellow_bold]Brak chunku ReadLover dla linii #{idx + 1}: {text[:60]}"
+                    )
+                    continue
 
-                if self._pp_speed != 1.0 and len(audio_int16) > 0:
-                    audio_int16 = self._pp_speed_audio(audio_int16, READLOVER_SAMPLE_RATE)
+                with wave.open(str(chunk_path), 'rb') as chunk_wav:
+                    wav_file.writeframes(chunk_wav.readframes(chunk_wav.getnframes()))
 
-                framerate: int = wav_file.getframerate()
-                nframes: int = wav_file.getnframes()
-                current_time: float = nframes / float(framerate)
-                if start_time > current_time:
-                    empty_frames: int = int((start_time - current_time) * framerate)
-                    wav_file.writeframes(b'\x00' * empty_frames * 2)
-
-                if len(audio_int16) > 0:
-                    wav_file.writeframes(audio_int16.tobytes())
+        _shutil.rmtree(cache_dir, ignore_errors=True)
 
     def srt_to_wav_elevenbytes(self, tts_speed: str, tts_volume: str, elevenbytes_voice: Optional[str] = None) -> None:
         """Async parallel batch synthesis via ElevenBytes (ElevenLabs proxy).
