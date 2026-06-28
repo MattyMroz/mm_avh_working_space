@@ -1,7 +1,7 @@
-"""Classify ASS subtitle styles as DIALOG vs ZNAK for auto narration mode.
+"""Classify ASS subtitle styles as DIALOG vs SIGN for auto narration mode.
 
 Split ASS styles into those meant for the narrator (DIALOG) and those skipped
-(ZNAK: on-screen signs, OP/ED songs, notes). Validated on 206 files with
+(SIGN: on-screen signs, OP/ED songs, notes). Validated on 206 files with
 agent-read ground truth: ~99% agreement, ~99% weighted by line count.
 
 The key mechanism is ANIMATION DEDUPLICATION: typesetting is often rendered
@@ -222,7 +222,7 @@ def _classify_metrics(metrics: _StyleMetrics, style: str, total: int) -> tuple[C
 
 
 def classify_styles(subs: SSAFile) -> list[StyleVerdict]:
-    """Classify every subtitle style in an ASS file as DIALOG/ZNAK.
+    """Classify every subtitle style in an ASS file as DIALOG/SIGN.
 
     Deduplicate animation, accumulate per-style metrics, then classify. The
     result is sorted by descending line count (most significant styles first).

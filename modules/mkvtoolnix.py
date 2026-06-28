@@ -333,7 +333,9 @@ class MkvToolNix:
             return '—'
         for track in tracks:
             if track.get('id') == track_id:
-                return track.get('language') or '—'
+                # get_mkv_info returns raw mkvmerge JSON: language sits in properties.
+                return (track.get('language')
+                        or track.get('properties', {}).get('language') or '—')
         return '—'
 
     @staticmethod

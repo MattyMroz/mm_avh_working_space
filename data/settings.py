@@ -753,7 +753,9 @@ class Settings:
             elevenbytes_voice=elevenbytes_voice,
             pp_speed=pp_speed,
             pp_volume=pp_volume,
-            output=output
+            output=output,
+            # Preserve auto_mode across an interactive edit (it has no menu entry).
+            auto_mode=settings.auto_mode if settings else False
         )
 
     @staticmethod
