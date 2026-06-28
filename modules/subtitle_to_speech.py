@@ -936,14 +936,15 @@ class SubtitleToSpeech:
 
         # ── Phase 3: Build RAW PCM timeline from cache to bypass 4GB WAV limit ──
         # soundfile decodes MP3 in-process (~215x faster than per-chunk ffmpeg spawn);
-        # atempo runs per chunk over parallel ffmpeg pipes. Byte-identical to the old
-        # path: timeline length comes from real post-atempo audio, silence is untouched.
+        # atempo runs per chunk over parallel ffmpeg pipes. Perceptually equivalent to
+        # the old path (a different decoder/resampler, so not bit-exact), with the same
+        # timeline math: length comes from real post-atempo audio, silence is untouched.
         import soundfile as sf
 
         raw_pcm_path = output_file.replace(".wav", ".pcm")
 
         def _decode_mp3(mp3_file: _Path):
-            """MP3 -> int16 mono @ ELEVENBYTES_SAMPLE_RATE, bez ffmpeg. None gdy błąd/pusty."""
+            """MP3 -> int16 mono @ ELEVENBYTES_SAMPLE_RATE, no ffmpeg. None on error/empty."""
             try:
                 data, sr = sf.read(str(mp3_file), dtype="int16", always_2d=False)
             except Exception:
@@ -961,7 +962,7 @@ class SubtitleToSpeech:
             return data if len(data) else None
 
         def _atempo_pipe(audio_int16):
-            """atempo przez ffmpeg stdin->stdout (bez temp WAV). Ta sama semantyka co _pp_speed_audio."""
+            """atempo via ffmpeg stdin->stdout (no temp WAV). Same semantics as _pp_speed_audio."""
             chain = ",".join(self._build_atempo_chain(self._pp_speed))
             proc = subprocess_run(
                 [self.ffmpeg_path, "-loglevel", "quiet",
