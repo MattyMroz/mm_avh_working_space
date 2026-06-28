@@ -125,6 +125,31 @@ def _to_tracks(entry: dict) -> list[dict]:
     return tracks
 
 
+def test_raw_mkvmerge_properties_fallback() -> bool:
+    """Properties-nested fields (raw mkvmerge JSON) are read correctly.
+
+    mkvmerge nests language, track_name, num_index_entries and default_track
+    inside ``properties``; the selector must reach them there, not just at
+    the top level.  Polish audio wins for audio (jpn score=100), Polish subs
+    win for subs despite fewer lines because the language weight (pol=100)
+    dominates English (eng=50).
+    """
+    tracks = [
+        {"id": 1, "type": "audio", "properties": {"language": "jpn"}},
+        {"id": 2, "type": "subtitles", "properties": {"language": "pol", "num_index_entries": 300}},
+        {"id": 3, "type": "subtitles", "properties": {"language": "eng", "num_index_entries": 350}},
+    ]
+    got_aud = select_audio_track(tracks)
+    got_sub = select_subtitle_track(tracks)
+    ok_aud = got_aud == 1
+    ok_sub = got_sub == 2
+    print(
+        f"  [raw mkvmerge properties] audio id={got_aud} (want 1) -> {'OK' if ok_aud else 'FAIL'},"
+        f" sub id={got_sub} (want 2/pol) -> {'OK' if ok_sub else 'FAIL'}"
+    )
+    return ok_aud and ok_sub
+
+
 def test_regression_vs_validated_picks() -> bool:
     """Selector agreement with the validated picks is >= MIN_AGREEMENT for both kinds."""
     if not os.path.isfile(DATASET):
@@ -183,6 +208,7 @@ def main() -> int:
         test_subtitle_signs_only_rejected_same_lang(),
         test_subtitle_lines_break_lang_tie(),
         test_empty_returns_none(),
+        test_raw_mkvmerge_properties_fallback(),
         test_regression_vs_validated_picks(),
     ]
     if all(results):

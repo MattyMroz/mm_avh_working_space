@@ -81,8 +81,10 @@ _RE_SIGNS: Final[re.Pattern[str]] = re.compile(r"sign|song|forced", re.I)
 def _track_name(track: dict) -> str:
     """Return the track's display name from whichever field is present.
 
-    Accept both the mkvmerge shape (``track_name``) and the dataset shape
-    (``name``); a missing name is an empty string.
+    Accept the dataset shape (``name``), the flat mkvmerge shape
+    (``track_name``), and the raw mkvmerge JSON shape where mkvmerge nests
+    metadata inside ``properties`` -- fall through all three so both test
+    fixtures and live production data work with one code path.
 
     Args:
         track: A single track dict.
@@ -90,7 +92,53 @@ def _track_name(track: dict) -> str:
     Returns:
         The track name, or an empty string if none is set.
     """
-    return track.get("track_name") or track.get("name") or ""
+    return (
+        track.get("track_name")
+        or track.get("name")
+        or track.get("properties", {}).get("track_name")
+        or ""
+    )
+
+
+def _track_language(track: dict) -> str:
+    """Return the track's ISO 639 language tag from whichever field is present.
+
+    mkvmerge nests ``language`` inside ``properties`` in its raw JSON output;
+    the dataset uses a flat ``lang`` key.  Try both, then fall back to the
+    nested location so that live mkvmerge data is handled without any
+    pre-processing step.
+
+    Args:
+        track: A single track dict.
+
+    Returns:
+        The language code (lowercased), or an empty string if none is set.
+    """
+    return (
+        track.get("language")
+        or track.get("lang")
+        or track.get("properties", {}).get("language")
+        or ""
+    ).lower()
+
+
+def _track_default(track: dict) -> bool:
+    """Return whether the track is flagged as the container default.
+
+    mkvmerge nests ``default_track`` inside ``properties`` in its raw JSON;
+    the dataset uses a flat ``default`` key.  Check both locations.
+
+    Args:
+        track: A single track dict.
+
+    Returns:
+        True if any default-flag field is truthy.
+    """
+    return bool(
+        track.get("default_track")
+        or track.get("default")
+        or track.get("properties", {}).get("default_track")
+    )
 
 
 def _is_signs_only(track: dict) -> bool:
@@ -101,15 +149,21 @@ def _is_signs_only(track: dict) -> bool:
 def _lines_bonus(track: dict) -> float:
     """Return the line-count tie-breaker, or 0.0 when the count is unknown.
 
+    Accept the dataset shapes (``num_lines`` / ``lines``) and the raw mkvmerge
+    JSON shape where mkvmerge stores the count as ``properties.num_index_entries``
+    -- fall through all three so both fixtures and live data resolve correctly.
+
     Args:
-        track: A single track dict, optionally with ``num_lines``/``lines``.
+        track: A single track dict, optionally with a line-count field.
 
     Returns:
-        ``num_lines / _LINES_DIVISOR``, or 0.0 if no usable count is present.
+        ``lines / _LINES_DIVISOR``, or 0.0 if no usable count is present.
     """
     lines = track.get("num_lines")
     if lines is None:
         lines = track.get("lines")
+    if lines is None:
+        lines = track.get("properties", {}).get("num_index_entries")
     if lines is None:
         return 0.0
     return lines / _LINES_DIVISOR
@@ -128,7 +182,7 @@ def score_subtitle_track(track: dict) -> float:
     Returns:
         The track's score; the caller picks the maximum.
     """
-    lang = (track.get("language") or track.get("lang") or "").lower()
+    lang = _track_language(track)
     score = float(_SUB_LANG_WEIGHT.get(lang, _SUB_LANG_DEFAULT))
     if _is_signs_only(track):
         score += _SIGNS_PENALTY
@@ -147,9 +201,9 @@ def score_audio_track(track: dict) -> float:
     Returns:
         The track's score; the caller picks the maximum.
     """
-    lang = (track.get("language") or track.get("lang") or "").lower()
+    lang = _track_language(track)
     score = float(_AUDIO_LANG_WEIGHT.get(lang, _AUDIO_LANG_DEFAULT))
-    if track.get("default_track") or track.get("default"):
+    if _track_default(track):
         score += _DEFAULT_BONUS
     return score
 
