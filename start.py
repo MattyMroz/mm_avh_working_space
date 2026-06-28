@@ -253,19 +253,15 @@ def translate_files(files_to_translate: dict, settings: Settings):
     """
     translator_instance: SubtitleTranslator = SubtitleTranslator()
 
-    # Sprawdzenie, czy ustawienia zawierają konkretny translator
-    if 'Gemini Pro' in settings.translator:
-        translator_instance.translate_gemini()
-    else:
-        for filename, should_translate in files_to_translate.items():
-            if should_translate:
+    for filename, should_translate in files_to_translate.items():
+        if should_translate:
+            translator_instance.translate_srt(filename,
+                                              WORKING_SPACE_TEMP_MAIN_SUBS,
+                                              settings)
+            if path.exists(path.join(WORKING_SPACE_TEMP_ALT_SUBS, filename)):
                 translator_instance.translate_srt(filename,
-                                                  WORKING_SPACE_TEMP_MAIN_SUBS,
+                                                  WORKING_SPACE_TEMP_ALT_SUBS,
                                                   settings)
-                if path.exists(path.join(WORKING_SPACE_TEMP_ALT_SUBS, filename)):
-                    translator_instance.translate_srt(filename,
-                                                      WORKING_SPACE_TEMP_ALT_SUBS,
-                                                      settings)
 
 
 def convert_numbers_to_words():  # ✅

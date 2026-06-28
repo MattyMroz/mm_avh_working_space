@@ -17,7 +17,6 @@
         {
         "translator": "Google Translator",
         "deepl_api_key": "null",
-        "chat_gpt_access_token": null,
         "translated_line_count": "50",
         "tts": "TTS - Agnieszka - Ivona",
         "tts_speed": "5",
@@ -29,7 +28,6 @@
 from dataclasses import asdict, dataclass
 from json import decoder, dump, load
 from typing import Dict, List, Optional, Tuple
-import webbrowser
 
 from constants import SETTINGS_PATH, console
 from data.config import Config
@@ -43,7 +41,6 @@ class Settings:
         Attributes:
             - translator (Optional[str]): The selected translator.
             - deepl_api_key (Optional[str]): The API key for DeepL translation service.
-            - chat_gpt_access_token (Optional[str]): The access token for ChatGPT API.
             - translated_line_count (Optional[str]): The number of translated lines.
             - tts (Optional[str]): The selected TTS engine.
             - tts_speed (Optional[str]): The speed of the TTS voice.
@@ -60,7 +57,6 @@ class Settings:
             - _is_valid_volume(volume: str, tts: str) -> bool: Check if a given volume value is valid for the selected TTS engine.
             - _get_translator(settings: Optional['Settings']) -> Optional[str]: Get the selected translator.
             - _get_deepl_api_key(settings: Optional['Settings']) -> Optional[str]: Get the DeepL API key.
-            - _get_chat_gpt_access_token(settings: Optional['Settings']) -> Optional[str]: Get the ChatGPT access token.
             - _get_translated_line_count(settings: Optional['Settings']) -> Optional[str]: Get the number of translated lines.
             - _get_tts(settings: Optional['Settings']) -> Optional[str]: Get the selected TTS engine.
             - _get_default_speed_volume(tts: str) -> Tuple[Optional[str], Optional[str]]: Get the default speed and volume for a TTS engine.
@@ -72,7 +68,6 @@ class Settings:
     """
     translator: Optional[str] = None
     deepl_api_key: Optional[str] = None
-    chat_gpt_access_token: Optional[str] = None
     translated_line_count: Optional[str] = None
     tts: Optional[str] = None
     tts_speed: Optional[str] = None
@@ -136,7 +131,6 @@ class Settings:
             return cls(
                 translator='Google Translator',
                 deepl_api_key=None,
-                chat_gpt_access_token=None,
                 translated_line_count='50',
                 tts='TTS - Agnieszka - Ivona',
                 tts_speed='5',
@@ -165,7 +159,6 @@ class Settings:
         return Settings(
             translator=data.get('translator'),
             deepl_api_key=data.get('deepl_api_key'),
-            chat_gpt_access_token=data.get('chat_gpt_access_token'),
             translated_line_count=data.get('translated_line_count'),
             tts=data.get('tts'),
             tts_speed=data.get('tts_speed'),
@@ -313,37 +306,6 @@ class Settings:
         else:
             deepl_api_key = settings.deepl_api_key if settings else None
         return deepl_api_key
-
-    @staticmethod
-    def _get_chat_gpt_access_token(settings: Optional['Settings']) -> Optional[str]:
-        """
-            Prompt the user to set the Chat GPT access token or retrieve it from the user settings.
-
-            Args:
-                - settings (Optional['Settings']): The user settings object.
-
-            Returns:
-                - Optional[str]: The Chat GPT access token or None if not set.
-        """
-
-        console.print(
-            '\nCzy chcesz ustawić token dostępu do chat GPT?', style='yellow_bold')
-        console.print('(T lub Y - tak): ', style='green_bold',
-                      end='')
-        if input().lower() in ('t', 'y'):
-            console.print(
-                'Token dostępu (accessToken): https://chat.openai.com/api/auth/session', style='yellow_bold')
-            webbrowser.open('https://chat.openai.com/api/auth/session')
-            console.print(
-                'Podaj token dostępu do chat GPT: ', style='green_bold', end='')
-            chat_gpt_access_token = input()
-            if chat_gpt_access_token == '':
-                chat_gpt_access_token = settings.chat_gpt_access_token if settings else None
-                console.print(
-                    'Niepoprawna wartość. Nie zmieniono wartości!', style='red_bold')
-        else:
-            chat_gpt_access_token = settings.chat_gpt_access_token if settings else None
-        return chat_gpt_access_token
 
     @staticmethod
     def _get_translated_line_count(settings: Optional['Settings']) -> Optional[str]:
@@ -720,7 +682,6 @@ class Settings:
 
         translator = Settings._get_translator(settings)
         deepl_api_key = Settings._get_deepl_api_key(settings)
-        chat_gpt_access_token = Settings._get_chat_gpt_access_token(settings)
         translated_line_count = Settings._get_translated_line_count(settings)
         tts = Settings._get_tts(settings)
         default_speed, default_volume = Settings._get_default_speed_volume(tts)
@@ -740,7 +701,6 @@ class Settings:
         return Settings(
             translator=translator,
             deepl_api_key=deepl_api_key,
-            chat_gpt_access_token=chat_gpt_access_token,
             translated_line_count=translated_line_count,
             tts=tts,
             tts_speed=tts_speed,

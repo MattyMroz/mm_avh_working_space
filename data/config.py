@@ -43,12 +43,6 @@ class Config:
             {'name': 'Google Translate'},
             {'name': 'DeepL API'},
             {'name': 'DeepL Desktop Free'},
-            {
-                'name': 'ChatGPT',
-                'suboptions': [
-                    {'name': 'ChatGPT + Google Translate'}
-                ],
-            },
         ]
 
     @staticmethod
