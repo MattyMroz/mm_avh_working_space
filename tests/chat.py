@@ -1,6 +1,7 @@
 # https://chat.openai.com/api/auth/session
 
-# {"user":{"id":"user-iyTwG8edDJc6nzquextcUxLg","name":"Mateusz Mróz","email":"REDACTED@example.com","image":"https://lh3.googleusercontent.com/a/AGNmyxZ51xU7m0YcenfA1aPz0EcL0hntw4QZ_R522pPYEg=s96-c","picture":"https://lh3.googleusercontent.com/a/AGNmyxZ51xU7m0YcenfA1aPz0EcL0hntw4QZ_R522pPYEg=s96-c","idp":"google-oauth2","iat":1685039590,"mfa":false,"groups":["labs"],"intercom_hash":"REDACTED"},"expires":"2023-06-29T10:37:22.104Z","accessToken":"YOUR_OPENAI_ACCESS_TOKEN","authProvider":"auth0"}
+# Przykładowa odpowiedź z /api/auth/session (token i dane użytkownika usunięte — wklej własne lokalnie):
+# {"user":{...},"expires":"...","accessToken":"YOUR_ACCESS_TOKEN","authProvider":"auth0"}
 
 # Napisz funckjie obsugująca chat najpierw poproś o  access_token wyświetlając strone w przegląderce kodem poniżej (zapisz w funckji)
 # import webbrowser
