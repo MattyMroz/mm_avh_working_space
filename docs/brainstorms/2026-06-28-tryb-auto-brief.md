@@ -29,6 +29,7 @@ Każda święta zasada (TP-1 brak-LLM, TP-2 offline, TP-3 HITL-tylko-przy-niepew
 ### 🟡 Ważne (jakość, bezpieczeństwo)
 - **Sanity-check napisów**: ścieżka „dialogu” z <50 liniami → podejrzane → HITL (chroni przed wyborem signs jako głównych).
 - **Reguła anty-„cichy lektor”**: ZNAK wymaga *pozytywnego* sygnału (pos/draw), nie samego braku interpunkcji; karaoke `\k` → ZNAK.
+- **Reguła OP/ED/piosenki** (uwaga usera): tekst piosenki bywa długi i z interpunkcją → bez dodatkowego sygnału heurystyka wzięłaby go za dialog. Karaoke `\k` (czas sylab) → twardo ZNAK, niezależnie od długości/nazwy. Nazwy `op/ed/song/lyric/insert/opening/ending` → sygnał ZNAK (wspierający, nie rozstrzygający sam). Zweryfikowane: liczba linii to najmocniejszy sygnał (Main=294/Default=284 → dialog; Signs=20/Next_Episode=1 → znak).
 - **Log decyzji** (audytowalność: czemu styl→dialog/znak, z metrykami) + dry-run jako „test na żywych danych”.
 - **Walidacja nazwy backendu** translatora (mapowanie po stringu jest kruche).
 
