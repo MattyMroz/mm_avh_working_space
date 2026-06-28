@@ -203,3 +203,6 @@ bin/
 
 # --- Temp brainstorm files ----------------------------------------------------
 temp/
+
+# --- Claude Code (skille/config syncowane z repo agents — źródło prawdy tam) ---
+.claude/
