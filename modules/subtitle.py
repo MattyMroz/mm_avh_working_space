@@ -83,9 +83,9 @@ class SubtitleRefactor:
             Splits an ASS subtitle file into two files based on selected styles.
 
             Args:
-                auto_mode: Gdy True, style dialogu są wybierane automatycznie przez
-                    klasyfikator (modules.style_classifier) zamiast ręcznego wyboru.
-                    Domyślnie False — zachowuje dotychczasowy tryb interaktywny.
+                auto_mode: When True, dialogue styles are picked automatically by
+                    the classifier (modules.style_classifier) instead of manual
+                    selection. Defaults to False, keeping the interactive flow.
         """
         self._create_directories()
         subs: SSAFile = self._load_subs()
@@ -181,7 +181,7 @@ class SubtitleRefactor:
         console.print(self.filename, style='white_bold')
 
         verdicts = classify_styles(subs)
-        icon = {Category.DIALOG: '🗣️', Category.ZNAK: '🔇',
+        icon = {Category.DIALOG: '🗣️', Category.SIGN: '🔇',
                 Category.UNCERTAIN: '❓'}
         selected: List[str] = []
         for v in verdicts:

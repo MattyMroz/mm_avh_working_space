@@ -52,8 +52,6 @@ _RE_NOTE: Final[re.Pattern[str]] = re.compile(
 _RE_SIGN: Final[re.Pattern[str]] = re.compile(
     r"sign|znak|kartka|title|next_ep|acquired|chyron|chapter|^ts$|typeset|caption.?box|box$", re.I
 )
-# Positional names (Top/Center/Bottom) are intentionally absent here -- they are
-# often labels (headers, locations), so the metrics decide those cases instead.
 _RE_DLG: Final[re.Pattern[str]] = re.compile(
     r"default|main|dialog|narrat|italic|flashback|tirets|thought|mysli|myśli|alter|overlap", re.I
 )
@@ -78,8 +76,8 @@ _DLG_MAX_POS_RATIO: Final[float] = 0.50
 _SCORE_DIALOG: Final[float] = 0.55
 """Score at or above which a style is classified as DIALOG."""
 
-_SCORE_ZNAK: Final[float] = 0.25
-"""Score at or below which a style is classified as ZNAK."""
+_SCORE_SIGN: Final[float] = 0.25
+"""Score at or below which a style is classified as SIGN."""
 
 
 class Category(Enum):
@@ -88,10 +86,10 @@ class Category(Enum):
     DIALOG = "DIALOG"
     """Speech, narration or thoughts -- read by the narrator."""
 
-    ZNAK = "ZNAK"
+    SIGN = "SIGN"
     """On-screen sign, song or note -- skipped."""
 
-    UNCERTAIN = "NIEPEWNE"
+    UNCERTAIN = "UNCERTAIN"
     """Heuristic is unsure -- left for dry-run or user decision."""
 
 
@@ -185,15 +183,15 @@ def _classify_metrics(metrics: _StyleMetrics, style: str, total: int) -> tuple[C
     pos, draw, kara, punct = metrics.pos / n, metrics.draw / n, metrics.kara / n, metrics.punct / n
     avg, frac = metrics.txt / n, metrics.n / total
 
-    # Hard ZNAK rules.
+    # Hard SIGN rules.
     if draw > _DRAW_SIGN_RATIO:
-        return Category.ZNAK, 0.95
+        return Category.SIGN, 0.95
     if kara > _KARA_SONG_RATIO:
-        return Category.ZNAK, 0.95
+        return Category.SIGN, 0.95
     if _RE_SONG.search(style):
-        return Category.ZNAK, 0.9
+        return Category.SIGN, 0.9
     if _RE_NOTE.search(style):
-        return Category.ZNAK, 0.9
+        return Category.SIGN, 0.9
 
     # Confident dialogue variant with no positioning/drawing -- read it.
     if _RE_DLG.search(style) and pos < _DLG_MAX_POS_RATIO and draw == 0:
@@ -218,8 +216,8 @@ def _classify_metrics(metrics: _StyleMetrics, style: str, total: int) -> tuple[C
 
     if score >= _SCORE_DIALOG:
         return Category.DIALOG, round(min(score, 0.99), 2)
-    if score <= _SCORE_ZNAK:
-        return Category.ZNAK, round(min(1 - score, 0.95), 2)
+    if score <= _SCORE_SIGN:
+        return Category.SIGN, round(min(1 - score, 0.95), 2)
     return Category.UNCERTAIN, 0.5
 
 

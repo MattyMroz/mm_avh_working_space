@@ -47,7 +47,7 @@ def _load_ground_truth() -> dict[str, dict[str, str]]:
             data = json.load(f)
         for fn, styles in data.items():
             gt[fn] = {
-                st: ("DIALOG" if info["cat"] == "DIALOG" else "ZNAK")
+                st: ("DIALOG" if info["cat"] == "DIALOG" else "SIGN")
                 for st, info in styles.items()
             }
     return gt
