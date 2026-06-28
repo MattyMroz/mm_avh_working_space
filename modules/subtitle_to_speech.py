@@ -763,10 +763,8 @@ class SubtitleToSpeech:
         cache_dir = _Path(self.working_space_temp_main_subs) / "_elevenbytes_cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
 
-        # max_retries niski: gubione requesty (pusty/za mały plik, brak odpowiedzi
-        # serwera pod obciążeniem) mają szybko wrócić do puli i być ponowione w tej
-        # samej/następnej rundzie — retry zapewnia warstwa rund niżej, nie pojedynczy
-        # request. Wysoki max_retries blokowałby wątek (i całą rundę) na minuty.
+        # Low max_retries: retry is owned by the round/inline layer, not the request,
+        # so a lost one returns fast instead of blocking the thread for minutes.
         tts = ElevenBytesTTS(default_voice=elevenbytes_voice or 'dallin', max_retries=2)
 
         # ── Phase 1: Parse & clean all subtitles ──
@@ -831,15 +829,27 @@ class SubtitleToSpeech:
         _print_lock = threading.Lock()
         CONCURRENCY: int = 85
         consecutive_zero: int = 0
+        # A few lost requests/episode: retry in-slot so they don't wait for the round.
+        INLINE_RETRIES: int = 3
+        INLINE_RETRY_DELAY: float = 1.5
+        # Above this fail ratio it's an API outage -> fall back to cooldown + round.
+        MASS_FAIL_RATIO: float = 0.25
 
         def _synth_one(orig_idx: int, text: str) -> tuple[int, str, bytes | None, str | None, float]:
-            """Synthesize single subtitle. Returns (idx, text, audio|None, error|None, elapsed)."""
+            """Synthesize single subtitle with inline retry. Returns (idx, text, audio|None, error|None, elapsed)."""
             t0 = _time.monotonic()
-            try:
-                mp3 = tts.synthesize_sync(text)
-                return (orig_idx, text, mp3, None, _time.monotonic() - t0)
-            except Exception as exc:
-                return (orig_idx, text, None, str(exc), _time.monotonic() - t0)
+            last_err: str | None = None
+            for inline_attempt in range(INLINE_RETRIES):
+                try:
+                    mp3 = tts.synthesize_sync(text)
+                    if mp3 and len(mp3) >= 1024:
+                        return (orig_idx, text, mp3, None, _time.monotonic() - t0)
+                    last_err = "too small"
+                except Exception as exc:
+                    last_err = str(exc)
+                if inline_attempt < INLINE_RETRIES - 1:
+                    _time.sleep(INLINE_RETRY_DELAY)
+            return (orig_idx, text, None, last_err, _time.monotonic() - t0)
 
         while pending:
             elapsed: float = _time.monotonic() - t_start
@@ -905,14 +915,18 @@ class SubtitleToSpeech:
                 flush=True,
             )
 
+            round_total: int = len(pending)
+            fail_ratio: float = len(new_pending) / round_total if round_total else 0.0
             pending = new_pending
             if pending:
-                if round_ok == 0:
+                # Inline retry already handles a few losses; reaching here means outage.
+                if fail_ratio > MASS_FAIL_RATIO:
                     consecutive_zero += 1
                     cooldown = min(30.0 * (2 ** (consecutive_zero - 1)), 300.0)
                     print(
-                        f"API blocked — cooldown {cooldown:.0f}s "
-                        f"(zero rounds: {consecutive_zero})...",
+                        f"API problem ({len(pending)}/{round_total} fail = "
+                        f"{fail_ratio * 100:.0f}%) — cooldown {cooldown:.0f}s "
+                        f"(awarie z rzędu: {consecutive_zero})...",
                         flush=True,
                     )
                     _time.sleep(cooldown)
@@ -921,12 +935,9 @@ class SubtitleToSpeech:
                     print("Immediate next round...", flush=True)
 
         # ── Phase 3: Build RAW PCM timeline from cache to bypass 4GB WAV limit ──
-        # Dekodowanie MP3 przez soundfile (libsndfile) in-process — ~215x szybsze
-        # niż AudioSegment.from_mp3 (które spawnowało proces ffmpeg per chunk).
-        # atempo (gdy _pp_speed != 1.0) liczone per chunk przez ffmpeg pipe RÓWNOLEGLE.
-        # Timeline (cisza + current_samples) składana identycznie jak dotąd — wynik
-        # bajtowo zgodny z poprzednią wersją, bo długość liczona z RZECZYWISTEGO
-        # audio po atempo. Cisza nigdy nie przechodzi przez atempo.
+        # soundfile decodes MP3 in-process (~215x faster than per-chunk ffmpeg spawn);
+        # atempo runs per chunk over parallel ffmpeg pipes. Byte-identical to the old
+        # path: timeline length comes from real post-atempo audio, silence is untouched.
         import soundfile as sf
 
         raw_pcm_path = output_file.replace(".wav", ".pcm")
@@ -960,7 +971,7 @@ class SubtitleToSpeech:
             )
             return np.frombuffer(proc.stdout, dtype=np.int16)
 
-        # 1) Dekoduj wszystkie istniejące chunki in-process (brakujące -> pomijane)
+        # 1) Decode existing chunks in-process (missing ones skipped)
         decoded: Dict[int, "np.ndarray"] = {}
         for idx, start_time, text in sub_items:
             mp3_path = cache_dir / f"{idx:04d}.mp3"
@@ -970,7 +981,7 @@ class SubtitleToSpeech:
             if arr is not None:
                 decoded[idx] = arr
 
-        # 2) atempo per chunk, RÓWNOLEGLE (tylko gdy _pp_speed != 1.0)
+        # 2) Per-chunk atempo in parallel (only when _pp_speed != 1.0)
         if self._pp_speed != 1.0 and decoded:
             from os import cpu_count
             keys = list(decoded.keys())
@@ -979,7 +990,7 @@ class SubtitleToSpeech:
                 for k, res in zip(keys, pool.map(lambda kk: _atempo_pipe(decoded[kk]), keys)):
                     decoded[k] = res
 
-        # 3) Złóż timeline z ciszą — identyczna logika current_samples co dotąd
+        # 3) Assemble timeline with silence (same current_samples logic as before)
         current_samples: int = 0
         with open(raw_pcm_path, 'wb') as pcm_file:
             for idx, start_time, text in sub_items:
