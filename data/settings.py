@@ -49,6 +49,9 @@ class Settings:
             - tts_speed (Optional[str]): The speed of the TTS voice.
             - tts_volume (Optional[str]): The volume of the TTS voice.
             - output (Optional[str]): The selected output option.
+            - auto_mode (bool): When True, the pipeline runs unattended (tracks,
+                styles, translation and audio are decided automatically and
+                logged, with no Y/N prompts). Defaults to False.
 
         Methods:
             - load_from_file(cls, settings_path: str) -> 'Settings': Load settings from a file.
@@ -83,6 +86,7 @@ class Settings:
     pp_speed: Optional[str] = None
     pp_volume: Optional[str] = None
     output: Optional[str] = None
+    auto_mode: bool = False
 
     @staticmethod
     def _normalize_readlover_api_keys(api_keys: Optional[str | List[str]]) -> List[str]:
@@ -174,7 +178,8 @@ class Settings:
             elevenbytes_voice=data.get('elevenbytes_voice'),
             pp_speed=data.get('pp_speed', pp_defaults['default_pp_speed']),
             pp_volume=data.get('pp_volume', pp_defaults['default_pp_volume']),
-            output=data.get('output')
+            output=data.get('output'),
+            auto_mode=data.get('auto_mode', False)
         )
 
     @staticmethod

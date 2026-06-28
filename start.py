@@ -65,31 +65,42 @@ def ask_user(question: str) -> bool:
         sys.exit(0)
 
 
-def update_settings() -> Settings:  # ✅
+def update_settings(auto: bool = False) -> Settings:  # ✅
     """
         Asks the user if they want to update the settings. If yes, updates the settings and saves them to a file.
+
+        Args:
+            auto: When True, skips the prompt and loads settings as-is
+                (unattended auto mode makes no interactive changes).
 
         Returns:
             Settings: The updated settings.
     """
-    if ask_user('💾 Czy chcesz zmienić ustawienia? (T lub Y - tak):'):
+    if not auto and ask_user('💾 Czy chcesz zmienić ustawienia? (T lub Y - tak):'):
         Settings.change_settings_save_to_file()
         console.print('Zapisano ustawienia.\n', style='green_bold')
-    else:
+    elif not auto:
         console.print('Pomijam tę opcję.\n', style='red_bold')
     return Settings.load_from_file()
 
 
-def extract_tracks_from_mkv():  # ✅
+def extract_tracks_from_mkv(auto: bool = False):  # ✅
     """
-        Asks the user if they want to extract tracks from MKV files. If yes, extracts the tracks.
+        Extracts tracks from MKV files.
+
+        In manual mode the user is asked whether to extract; in auto mode the
+        audio and subtitle tracks are picked automatically for every MKV file
+        without any prompt.
+
+        Args:
+            auto (bool): When True, skip the prompt and auto-select tracks.
     """
-    if ask_user('🧲 Czy chcesz wyciągnąć ścieżki z plików mkv? (T lub Y - tak):'):
+    if auto or ask_user('🧲 Czy chcesz wyciągnąć ścieżki z plików mkv? (T lub Y - tak):'):
         files: List[str] = get_mkv_files(WORKING_SPACE)
         sorted_files: List[str] = natsorted(files)
         for filename in sorted_files:
             mkv: MkvToolNix = MkvToolNix(filename)
-            mkv.mkv_extract_track(mkv.get_mkv_info())
+            mkv.mkv_extract_track(mkv.get_mkv_info(), auto_mode=auto)
     else:
         console.print('Pomijam tę opcję.\n', style='red_bold')
 
@@ -108,9 +119,13 @@ def get_mkv_files(directory: str) -> List[str]:
             if path.isfile(path.join(directory, file)) and file.endswith('.mkv')]
 
 
-def refactor_subtitles():  # ✅
+def refactor_subtitles(auto: bool = False):  # ✅
     """
         Refactors subtitles in various formats to a standard format.
+
+        Args:
+            auto (bool): When True, ASS/SSA styles are split automatically by the
+                classifier instead of asking the user.
     """
     subtitle_extensions: List[str] = [
         '.sup', '.txt', '.ogg',
@@ -122,7 +137,7 @@ def refactor_subtitles():  # ✅
         WORKING_SPACE_TEMP, subtitle_extensions)
     sorted_files: List[str] = natsorted(files)
     for filename in sorted_files:
-        refactor_subtitle_file(filename)
+        refactor_subtitle_file(filename, auto=auto)
 
 
 def get_files_with_extensions(directory: str, extensions: List[str]) -> List[str]:
@@ -145,16 +160,18 @@ def get_files_with_extensions(directory: str, extensions: List[str]) -> List[str
     ]
 
 
-def refactor_subtitle_file(filename: str):
+def refactor_subtitle_file(filename: str, auto: bool = False):
     """
         Refactors a subtitle file to a standard format.
 
         Args:
             filename (str): The name of the subtitle file to refactor.
+            auto (bool): When True, ASS/SSA styles are split automatically by the
+                classifier instead of asking the user.
     """
     subtitle: SubtitleRefactor = SubtitleRefactor(filename)
     if filename.endswith('.ass') or filename.endswith('.ssa'):
-        subtitle.split_ass()
+        subtitle.split_ass(auto_mode=auto)
         subtitle.ass_to_srt()
     if filename.endswith('.srt'):
         subtitle.move_srt()
@@ -164,19 +181,26 @@ def refactor_subtitle_file(filename: str):
                             split_method='word')
 
 
-def translate_subtitles(settings: Settings):  # ✅
+def translate_subtitles(settings: Settings, auto: bool = False):  # ✅
     """
-        Asks the user if they want to translate subtitle files. If yes, translates the files.
+        Translates subtitle files.
+
+        In manual mode the user is asked whether to translate and which files; in
+        auto mode every file is translated without any prompt.
 
         Args:
-        settings (Settings): The settings to use for translation.
+            settings (Settings): The settings to use for translation.
+            auto (bool): When True, skip the prompts and translate all files.
     """
-    if not ask_user('💭 Czy chcesz tłumaczyć pliki napisów? (T lub Y - tak):'):
+    if not auto and not ask_user('💭 Czy chcesz tłumaczyć pliki napisów? (T lub Y - tak):'):
         console.print('Pomijam tę opcję.\n', style='red_bold')
         return
 
     main_subs_files = get_srt_files(WORKING_SPACE_TEMP_MAIN_SUBS)
-    files_to_translate = ask_to_translate_files(main_subs_files)
+    if auto:
+        files_to_translate = {filename: True for filename in main_subs_files}
+    else:
+        files_to_translate = ask_to_translate_files(main_subs_files)
     translate_files(files_to_translate, settings)
 
 
@@ -274,20 +298,27 @@ def convert_numbers_in_files(files: List[str]):
             console.print(f'Pomijam plik {filename}.\n', style='red_bold')
 
 
-def generate_audio_for_subtitles(settings: Settings) -> None:  # ✅
+def generate_audio_for_subtitles(settings: Settings, auto: bool = False) -> None:  # ✅
     """
-        Asks the user if they want to generate audio for subtitles. If yes, generates the audio.
+        Generates audio for subtitles.
+
+        In manual mode the user is asked whether to generate audio and for which
+        files; in auto mode audio is generated for every file without any prompt.
 
         Args:
             settings (Settings): The settings to use for audio generation.
+            auto (bool): When True, skip the prompts and generate audio for all files.
     """
-    if not ask_user('🎤 Czy chcesz generować audio dla napisów? (T lub Y - tak):'):
+    if not auto and not ask_user('🎤 Czy chcesz generować audio dla napisów? (T lub Y - tak):'):
         console.print('Pomijam tę opcję.\n', style='red_bold')
         return
 
     main_subs_files: List[str] = get_srt_files(WORKING_SPACE_TEMP_MAIN_SUBS)
-    files_to_generate_audio: Dict[str, bool] = ask_to_generate_audio_files(
-        main_subs_files)
+    if auto:
+        files_to_generate_audio: Dict[str, bool] = {
+            filename: True for filename in main_subs_files}
+    else:
+        files_to_generate_audio = ask_to_generate_audio_files(main_subs_files)
     generate_audio_files(files_to_generate_audio, settings)
 
 
@@ -382,14 +413,26 @@ def clear_temp_folders():
 def main():
     """
         Main function that runs the entire process.
+
+        When settings.auto_mode is True the pipeline runs unattended: every step
+        executes automatically (tracks, styles, translation and audio), decisions
+        are logged instead of prompted, and number-to-words conversion is skipped
+        (the user's preference). Otherwise the interactive flow is unchanged.
     """
     display_logo()
-    settings: Settings = update_settings()
-    extract_tracks_from_mkv()
-    refactor_subtitles()
-    translate_subtitles(settings)
-    convert_numbers_to_words()
-    generate_audio_for_subtitles(settings)
+    # Read auto_mode before update_settings so the settings prompt is skipped too.
+    auto: bool = Settings.load_from_file().auto_mode
+    if auto:
+        console.print(
+            'TRYB AUTOMATYCZNY — pipeline bez pytań.\n', style='green_bold')
+    settings: Settings = update_settings(auto=auto)
+    extract_tracks_from_mkv(auto=auto)
+    refactor_subtitles(auto=auto)
+    translate_subtitles(settings, auto=auto)
+    # Number-to-words conversion is skipped in auto mode by user preference.
+    if not auto:
+        convert_numbers_to_words()
+    generate_audio_for_subtitles(settings, auto=auto)
     refactor_alt_subtitles()
     process_output_files(settings)
     clear_temp_folders()

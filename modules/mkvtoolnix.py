@@ -31,6 +31,8 @@ from constants import (WORKING_SPACE,
                        MKV_PROPEDIT_PATH,
                        console)
 
+from modules.track_selector import select_audio_track, select_subtitle_track
+
 
 @dataclass(slots=True)
 class MkvToolNix:
@@ -201,15 +203,62 @@ class MkvToolNix:
             )
         console.print()
 
-    def mkv_extract_track(self, data: Dict[str, any]) -> None:
+    def mkv_extract_track(self, data: Dict[str, any], auto_mode: bool = False) -> None:
         """
             Extracts the specified tracks from the MKV file using the mkvextract tool.
-            The tracks to be extracted are specified by their IDs.
-            The user is prompted to enter the IDs of the tracks to be extracted.
-            If an error occurs during the process, the program will exit with an error message.
+
+            In manual mode the user is prompted to enter the IDs of the tracks to
+            extract. In auto mode the original audio track and the source subtitle
+            track are picked automatically from the MKV metadata (see
+            modules.track_selector) and the decision is logged, with no prompt.
+            If an error occurs during the process, the program will exit with an
+            error message.
 
             Args:
                 - data (Dict[str, any]): A dictionary containing information about the MKV file.
+                - auto_mode (bool): When True, pick the audio and subtitle tracks
+                    automatically instead of asking the user. Defaults to False.
+        """
+        if auto_mode:
+            tracks_to_extract: Set[int] = self._auto_select_tracks(data)
+        else:
+            tracks_to_extract = self._prompt_tracks_to_extract(data)
+
+        try:
+            for track_id in tracks_to_extract:
+                track: str = data['tracks'][track_id]
+                codec_id: str = track['properties']['codec_id']
+                format_extension: str = self._get_format_extension(codec_id)
+                filename: str = f'{self.filename[:-4]}.{format_extension}'
+                out_file: str = path.join(self.working_space_temp, filename)
+                command: List[str] = self._get_extract_command(
+                    track_id, out_file)
+
+                with Popen(command) as process:
+                    console.print(
+                        f'\nEkstrakcja ścieżki {track_id} do pliku {filename}', style='yellow_bold')
+                    process.wait()
+
+        except (IndexError, KeyError):
+            console.print(
+                'Znaleziono nieprawidłowe ID ścieżki!', style='red_bold')
+            # Re-prompting only makes sense in manual mode; an auto re-run would
+            # deterministically pick the same invalid id and loop forever.
+            if not auto_mode:
+                self.mkv_extract_track(data)
+
+        console.print(
+            'Ekstrakcja zakończona pomyślnie.\n', style='green_bold')
+
+    def _prompt_tracks_to_extract(self, data: Dict[str, any]) -> Set[int]:
+        """
+            Prompts the user for the IDs of the tracks to extract.
+
+            Args:
+                - data (Dict[str, any]): A dictionary containing information about the MKV file.
+
+            Returns:
+                - Set[int]: The set of valid track IDs the user chose to extract.
         """
         valid_track_range: range = range(len(data['tracks']))
         tracks_to_extract: Set[int] = set()
@@ -232,28 +281,60 @@ class MkvToolNix:
                 console.print(
                     'Pominięto wyciąganie ścieżki.\n', style='red_bold')
 
-        try:
-            for track_id in tracks_to_extract:
-                track: str = data['tracks'][track_id]
-                codec_id: str = track['properties']['codec_id']
-                format_extension: str = self._get_format_extension(codec_id)
-                filename: str = f'{self.filename[:-4]}.{format_extension}'
-                out_file: str = path.join(self.working_space_temp, filename)
-                command: List[str] = self._get_extract_command(
-                    track_id, out_file)
+        return tracks_to_extract
 
-                with Popen(command) as process:
-                    console.print(
-                        f'\nEkstrakcja ścieżki {track_id} do pliku {filename}', style='yellow_bold')
-                    process.wait()
+    def _auto_select_tracks(self, data: Dict[str, any]) -> Set[int]:
+        """
+            Picks the original audio and source subtitle track automatically.
 
-        except (IndexError, KeyError):
-            console.print(
-                'Znaleziono nieprawidłowe ID ścieżki!', style='red_bold')
-            self.mkv_extract_track(data)
+            Uses modules.track_selector to choose one audio track (the original,
+            played under the narrator) and one subtitle track (translated then
+            voiced) from the MKV metadata, and logs the decision. Either may be
+            absent, in which case only the available track is extracted.
 
+            Args:
+                - data (Dict[str, any]): A dictionary containing information about the MKV file.
+
+            Returns:
+                - Set[int]: The set of chosen track IDs (audio and/or subtitles).
+        """
+        tracks: List[dict] = data['tracks']
+        audio_id: int | None = select_audio_track(tracks)
+        sub_id: int | None = select_subtitle_track(tracks)
+
+        tracks_to_extract: Set[int] = set()
+        if audio_id is not None:
+            tracks_to_extract.add(audio_id)
+        if sub_id is not None:
+            tracks_to_extract.add(sub_id)
+
+        audio_lang: str = self._track_language(tracks, audio_id)
+        sub_lang: str = self._track_language(tracks, sub_id)
         console.print(
-            'Ekstrakcja zakończona pomyślnie.\n', style='green_bold')
+            f'AUTO: ścieżka audio {audio_id if audio_id is not None else "brak"} ({audio_lang}), '
+            f'napisy {sub_id if sub_id is not None else "brak"} ({sub_lang})',
+            style='yellow_bold')
+
+        return tracks_to_extract
+
+    @staticmethod
+    def _track_language(tracks: List[dict], track_id: int | None) -> str:
+        """
+            Returns the language label of the track with the given id.
+
+            Args:
+                - tracks (List[dict]): All parsed tracks of the MKV file.
+                - track_id (int | None): The id to look up, or None.
+
+            Returns:
+                - str: The track language, or a placeholder when unknown.
+        """
+        if track_id is None:
+            return '—'
+        for track in tracks:
+            if track.get('id') == track_id:
+                return track.get('language') or '—'
+        return '—'
 
     @staticmethod
     def _get_format_extension(codec_id: str) -> str:
