@@ -49,6 +49,16 @@ from constants import (WORKING_SPACE,
 from utils.number_in_words import NumberInWords
 from utils.text_chunker import chunk_text
 
+# Match a literal backslash via chr(92) so the pattern survives Python 3.14's
+# stricter handling of invalid escape sequences in string literals (same
+# approach as modules/style_classifier.py).
+_BACKSLASH: str = chr(92)
+# Drawing-path commands such as "m 0 0 l 186 0" used to render vector shapes.
+_RE_DRAW_PATH: re.Pattern = re.compile(r'\b[mn] -?\d+')
+# An ASS \p1-\p9 tag, which switches the line into vector-drawing mode. Two
+# chr(92) match one literal backslash in the regex (as in style_classifier.py).
+_RE_DRAW_TAG: re.Pattern = re.compile(_BACKSLASH + _BACKSLASH + r'p[1-9]')
+
 
 @dataclass(slots=True)
 class SubtitleRefactor:
@@ -423,6 +433,17 @@ class SubtitleRefactor:
             "\nPrzekonwertowano liczby na słowa:", style='green_bold')
         console.print(srt_file_path, '\n', style='white_bold')
 
+    @staticmethod
+    def _is_vector_drawing(text: str) -> bool:
+        """
+            Returns True if an ASS event holds a vector drawing rather than text.
+
+            Drawings carry no translation, so they must be skipped when merging
+            the translated SRT back in. They are identified either by a drawing
+            command in the body (e.g. "m 0 0 l 186 0") or by a \\p1-\\p9 tag.
+        """
+        return bool(_RE_DRAW_PATH.search(text) or _RE_DRAW_TAG.search(text))
+
     def srt_to_ass(self) -> None:
         """
             This method updates the subtitles in an existing ASS file using the translated subtitles from an SRT file.
@@ -443,21 +464,38 @@ class SubtitleRefactor:
 
         if path.exists(ass_file_path):
             ass_subs = SSAFile.load(ass_file_path)
-            srt_index = 0
+            # Map SRT -> ASS by (start, end) timing rather than by a running
+            # counter: timings are invariant across ass->srt->translation, so
+            # they stay aligned no matter how the ASS is structured or how many
+            # lines ass_to_srt added/skipped. The same (start, end) can repeat
+            # (e.g. a drawing and a caption at one timestamp), so each key holds
+            # a queue of translations consumed in order.
+            translations_by_time: dict[Tuple[int, int], List[str]] = {}
+            for sub in srt_subs:
+                translations_by_time.setdefault(
+                    (sub.start, sub.end), []).append(sub.text)
+
             for event in ass_subs.events:
-                if event.type == "Dialogue" and srt_index < len(srt_subs) and not re.search(r'\b(m|n) -?\d+', event.text):
-                    # Sprawdź, czy tekst zawiera jakiekolwiek dekoratory
-                    if re.search(r'{\\.*?}', event.text):
-                        srt_index += 1
-                        continue
-                    srt_lines = srt_subs[srt_index].text.split('\n')
-                    last_brace_position = event.text.rfind('}')
-                    if last_brace_position != -1:
-                        event.text = event.text[:last_brace_position +
-                                                1] + '\n'.join(srt_lines)
-                    else:
-                        event.text = '\n'.join(srt_lines)
-                    srt_index += 1
+                if event.type != "Dialogue":
+                    continue
+                # Skip vector drawings (drawing-path commands like "m 0 0 l 186
+                # 0" or a \p1-\p9 drawing tag); they have no translation.
+                if self._is_vector_drawing(event.text):
+                    continue
+                translations = translations_by_time.get(
+                    (event.start, event.end))
+                if not translations:
+                    # Timing not found -> leave the original event untouched.
+                    continue
+                srt_lines: List[str] = translations.pop(0).split('\n')
+                # Preserve the leading ASS tags (everything up to and including
+                # the last '}', e.g. {\pos(...)}) and append the translation.
+                last_brace_position: int = event.text.rfind('}')
+                if last_brace_position != -1:
+                    event.text = event.text[:last_brace_position +
+                                            1] + '\n'.join(srt_lines)
+                else:
+                    event.text = '\n'.join(srt_lines)
             ass_subs.save(output_file_path)
         else:
             srt_subs = load(srt_file_path, encoding='utf-8')
