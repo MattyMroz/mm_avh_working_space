@@ -206,3 +206,6 @@ temp/
 
 # --- Claude Code (skille/config syncowane z repo agents — źródło prawdy tam) ---
 .claude/
+
+# --- User settings z kluczami API (NIE commitować — sekrety) -------------------
+data/settings.json

@@ -29,7 +29,7 @@
 from dataclasses import dataclass
 from msvcrt import getch
 from os import listdir, path, remove
-from subprocess import call, Popen
+from subprocess import call, Popen, run as subprocess_run, PIPE
 from threading import Thread
 from time import sleep
 import sys
@@ -741,7 +741,6 @@ class SubtitleToSpeech:
         import re
         import sys
         import time as _time
-        from io import BytesIO
         from pathlib import Path as _Path
         from modules.tts_elevenbytes import TTS as ElevenBytesTTS
         import numpy as np
@@ -764,7 +763,11 @@ class SubtitleToSpeech:
         cache_dir = _Path(self.working_space_temp_main_subs) / "_elevenbytes_cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
 
-        tts = ElevenBytesTTS(default_voice=elevenbytes_voice or 'dallin')
+        # max_retries niski: gubione requesty (pusty/za mały plik, brak odpowiedzi
+        # serwera pod obciążeniem) mają szybko wrócić do puli i być ponowione w tej
+        # samej/następnej rundzie — retry zapewnia warstwa rund niżej, nie pojedynczy
+        # request. Wysoki max_retries blokowałby wątek (i całą rundę) na minuty.
+        tts = ElevenBytesTTS(default_voice=elevenbytes_voice or 'dallin', max_retries=2)
 
         # ── Phase 1: Parse & clean all subtitles ──
         sub_items: list[tuple[int, float, str]] = []
@@ -918,11 +921,66 @@ class SubtitleToSpeech:
                     print("Immediate next round...", flush=True)
 
         # ── Phase 3: Build RAW PCM timeline from cache to bypass 4GB WAV limit ──
+        # Dekodowanie MP3 przez soundfile (libsndfile) in-process — ~215x szybsze
+        # niż AudioSegment.from_mp3 (które spawnowało proces ffmpeg per chunk).
+        # atempo (gdy _pp_speed != 1.0) liczone per chunk przez ffmpeg pipe RÓWNOLEGLE.
+        # Timeline (cisza + current_samples) składana identycznie jak dotąd — wynik
+        # bajtowo zgodny z poprzednią wersją, bo długość liczona z RZECZYWISTEGO
+        # audio po atempo. Cisza nigdy nie przechodzi przez atempo.
+        import soundfile as sf
+
         raw_pcm_path = output_file.replace(".wav", ".pcm")
-        flac_path = output_file.replace(".wav", ".flac")
 
+        def _decode_mp3(mp3_file: _Path):
+            """MP3 -> int16 mono @ ELEVENBYTES_SAMPLE_RATE, bez ffmpeg. None gdy błąd/pusty."""
+            try:
+                data, sr = sf.read(str(mp3_file), dtype="int16", always_2d=False)
+            except Exception:
+                return None
+            if data.ndim > 1:
+                data = data.mean(axis=1).astype(np.int16)
+            if sr != ELEVENBYTES_SAMPLE_RATE:
+                from fractions import Fraction
+                from scipy.signal import resample_poly
+                fr = Fraction(ELEVENBYTES_SAMPLE_RATE, sr)
+                data = np.clip(
+                    resample_poly(data.astype(np.float32), fr.numerator, fr.denominator),
+                    -32768, 32767,
+                ).astype(np.int16)
+            return data if len(data) else None
+
+        def _atempo_pipe(audio_int16):
+            """atempo przez ffmpeg stdin->stdout (bez temp WAV). Ta sama semantyka co _pp_speed_audio."""
+            chain = ",".join(self._build_atempo_chain(self._pp_speed))
+            proc = subprocess_run(
+                [self.ffmpeg_path, "-loglevel", "quiet",
+                 "-f", "s16le", "-ar", str(ELEVENBYTES_SAMPLE_RATE), "-ac", "1", "-i", "pipe:0",
+                 "-af", chain, "-f", "s16le", "-ac", "1", "-ar", str(ELEVENBYTES_SAMPLE_RATE), "pipe:1"],
+                input=audio_int16.tobytes(), stdout=PIPE, check=True,
+            )
+            return np.frombuffer(proc.stdout, dtype=np.int16)
+
+        # 1) Dekoduj wszystkie istniejące chunki in-process (brakujące -> pomijane)
+        decoded: Dict[int, "np.ndarray"] = {}
+        for idx, start_time, text in sub_items:
+            mp3_path = cache_dir / f"{idx:04d}.mp3"
+            if not mp3_path.exists():
+                continue
+            arr = _decode_mp3(mp3_path)
+            if arr is not None:
+                decoded[idx] = arr
+
+        # 2) atempo per chunk, RÓWNOLEGLE (tylko gdy _pp_speed != 1.0)
+        if self._pp_speed != 1.0 and decoded:
+            from os import cpu_count
+            keys = list(decoded.keys())
+            workers = min(cpu_count() or 4, len(keys))
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                for k, res in zip(keys, pool.map(lambda kk: _atempo_pipe(decoded[kk]), keys)):
+                    decoded[k] = res
+
+        # 3) Złóż timeline z ciszą — identyczna logika current_samples co dotąd
         current_samples: int = 0
-
         with open(raw_pcm_path, 'wb') as pcm_file:
             for idx, start_time, text in sub_items:
                 framerate: int = ELEVENBYTES_SAMPLE_RATE
@@ -933,21 +991,12 @@ class SubtitleToSpeech:
                     pcm_file.write(b'\x00' * empty_frames * 2)
                     current_samples += empty_frames
 
-                mp3_path = cache_dir / f"{idx:04d}.mp3"
-                if not mp3_path.exists():
+                audio_int16 = decoded.get(idx)
+                if audio_int16 is None or len(audio_int16) == 0:
                     continue
 
-                mp3_bytes: bytes = mp3_path.read_bytes()
-                audio_seg = AudioSegment.from_mp3(BytesIO(mp3_bytes))
-                audio_seg = audio_seg.set_channels(1).set_frame_rate(ELEVENBYTES_SAMPLE_RATE).set_sample_width(2)
-                audio_int16 = np.frombuffer(audio_seg.raw_data, dtype=np.int16)
-
-                if self._pp_speed != 1.0 and len(audio_int16) > 0:
-                    audio_int16 = self._pp_speed_audio(audio_int16, ELEVENBYTES_SAMPLE_RATE)
-
-                if len(audio_int16) > 0:
-                    pcm_file.write(audio_int16.tobytes())
-                    current_samples += len(audio_int16)
+                pcm_file.write(audio_int16.tobytes())
+                current_samples += len(audio_int16)
 
         # Konwersja surowego PCM na .wav z flagą -rf64 auto (pozwala na WAV > 4GB)
         call([
