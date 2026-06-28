@@ -104,4 +104,4 @@ uv run python -c "import edge_tts, os; print(os.path.dirname(edge_tts.__file__))
 
 ## 📧 Kontakt
 
-[![Email](https://img.shields.io/badge/Email-mateuszmroz001%40gmail.com-blue?style=for-the-badge&logo=gmail)](mailto:REDACTED@example.com)
+[![Email](https://img.shields.io/badge/Email-mateuszmroz001%40gmail.com-blue?style=for-the-badge&logo=gmail)](mailto:mateuszmroz001@gmail.com)
