@@ -78,15 +78,23 @@ class SubtitleRefactor:
     working_space_temp_main_subs = WORKING_SPACE_TEMP_MAIN_SUBS
     working_space_temp_alt_subs = WORKING_SPACE_TEMP_ALT_SUBS
 
-    def split_ass(self) -> None:
+    def split_ass(self, auto_mode: bool = False) -> None:
         """
             Splits an ASS subtitle file into two files based on selected styles.
+
+            Args:
+                auto_mode: Gdy True, style dialogu są wybierane automatycznie przez
+                    klasyfikator (modules.style_classifier) zamiast ręcznego wyboru.
+                    Domyślnie False — zachowuje dotychczasowy tryb interaktywny.
         """
         self._create_directories()
         subs: SSAFile = self._load_subs()
         styles: List[str] = self._get_styles(subs)
-        self._display_styles(styles)
-        selected_styles: List[str] = self._select_styles(styles)
+        if auto_mode:
+            selected_styles = self._auto_select_styles(subs, styles)
+        else:
+            self._display_styles(styles)
+            selected_styles = self._select_styles(styles)
         if not selected_styles:
             self._move_subs_to_main()
             return
@@ -151,6 +159,47 @@ class SubtitleRefactor:
                 if 0 <= selected_index < len(styles):
                     selected_styles.append(styles[selected_index])
         return selected_styles
+
+    def _auto_select_styles(self, subs: SSAFile, styles: List[str]) -> List[str]:
+        """
+            Automatically selects dialogue styles using the style classifier.
+
+            Prints a dry-run summary (which styles go to the narrator vs are skipped)
+            so the user can verify the split. Styles classified UNCERTAIN are kept as
+            dialogue — the user prefers to hear a line than to miss it.
+
+            Args:
+                subs: The loaded subtitle file.
+                styles: The list of style names present in the file.
+
+            Returns:
+                The list of style names to read aloud (DIALOG + UNCERTAIN).
+        """
+        from modules.style_classifier import Category, classify_styles
+
+        console.print("PODZIAŁ AUTOMATYCZNY:", style='yellow_bold')
+        console.print(self.filename, style='white_bold')
+
+        verdicts = classify_styles(subs)
+        icon = {Category.DIALOG: '🗣️', Category.ZNAK: '🔇',
+                Category.UNCERTAIN: '❓'}
+        selected: List[str] = []
+        for v in verdicts:
+            mark = icon[v.category]
+            read = v.category in (Category.DIALOG, Category.UNCERTAIN)
+            if read:
+                selected.append(v.style)
+            dup_note = (f", animacja {v.raw_line_count}->{v.line_count}"
+                        if v.raw_line_count > v.line_count else "")
+            console.print(
+                f"  {mark} {v.style} — {v.category.value} "
+                f"(pewność {v.confidence:.0%}, {v.line_count} linii{dup_note})",
+                style='white_bold')
+
+        if selected:
+            console.print("Lektor przeczyta style:", style='green_bold', end=' ')
+            console.print(", ".join(selected), style='white_bold')
+        return selected
 
     def _move_subs_to_main(self) -> None:
         """
