@@ -445,7 +445,6 @@ class TTS:
     ) -> SynthResult:
         """Pojedynczy element batcha — łapie błędy, nie crashuje całości."""
         t0 = time.perf_counter()
-        retries = 0
         try:
             self._validate_text(text)
             voice_id = self._resolve_voice(voice or self._default_voice)
@@ -487,7 +486,7 @@ class TTS:
     def _convert_audio(mp3_data: bytes, target_fmt: str) -> bytes:
         """Konwertuj MP3 → target format via ffmpeg (bundled z imageio-ffmpeg)."""
         try:
-            from imageio_ffmpeg import get_ffmpeg_exe
+            from imageio_ffmpeg import get_ffmpeg_exe  # type: ignore[import-not-found]
             ffmpeg = get_ffmpeg_exe()
         except ImportError:
             ffmpeg = shutil.which("ffmpeg")
@@ -541,7 +540,7 @@ class TTS:
     def _run_sync(self, coro: object) -> object:
         """Run async coroutine from sync context using persistent event loop."""
         loop = self._ensure_sync_loop()
-        future = asyncio.run_coroutine_threadsafe(coro, loop)  # type: ignore[arg-type]
+        future: concurrent.futures.Future = asyncio.run_coroutine_threadsafe(coro, loop)  # type: ignore[arg-type]
         try:
             return future.result(timeout=3600.0)
         except concurrent.futures.TimeoutError:

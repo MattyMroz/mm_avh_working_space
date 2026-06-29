@@ -2,7 +2,7 @@ import sys
 from msvcrt import getch
 from os import listdir, makedirs, path
 from shutil import rmtree
-from typing import Dict, List
+from typing import Dict, List, Set
 
 from natsort import natsorted
 
@@ -84,7 +84,7 @@ def update_settings(auto: bool = False) -> Settings:  # ✅
     return Settings.load_from_file()
 
 
-def extract_tracks_from_mkv(auto: bool = False):  # ✅
+def extract_tracks_from_mkv(auto: bool = False) -> Set[str]:  # ✅
     """
         Extracts tracks from MKV files.
 
@@ -94,15 +94,23 @@ def extract_tracks_from_mkv(auto: bool = False):  # ✅
 
         Args:
             auto (bool): When True, skip the prompt and auto-select tracks.
+
+        Returns:
+            Set[str]: Base file names whose subtitles are already Polish (skip
+                translation in auto mode).
     """
+    already_polish: Set[str] = set()
     if auto or ask_user('🧲 Czy chcesz wyciągnąć ścieżki z plików mkv? (T lub Y - tak):'):
         files: List[str] = get_mkv_files(WORKING_SPACE)
         sorted_files: List[str] = natsorted(files)
         for filename in sorted_files:
             mkv: MkvToolNix = MkvToolNix(filename)
             mkv.mkv_extract_track(mkv.get_mkv_info(), auto_mode=auto)
+            if mkv.subtitle_already_target_lang:
+                already_polish.add(filename[:-4])
     else:
         console.print('Pomijam tę opcję.\n', style='red_bold')
+    return already_polish
 
 
 def get_mkv_files(directory: str) -> List[str]:
@@ -181,24 +189,37 @@ def refactor_subtitle_file(filename: str, auto: bool = False):
                             split_method='word')
 
 
-def translate_subtitles(settings: Settings, auto: bool = False):  # ✅
+def translate_subtitles(settings: Settings, auto: bool = False,
+                        already_polish: Set[str] | None = None):  # ✅
     """
         Translates subtitle files.
 
         In manual mode the user is asked whether to translate and which files; in
-        auto mode every file is translated without any prompt.
+        auto mode every file is translated without any prompt, except files whose
+        subtitles are already Polish.
 
         Args:
             settings (Settings): The settings to use for translation.
             auto (bool): When True, skip the prompts and translate all files.
+            already_polish (Set[str] | None): Base names of files whose subtitles
+                are already Polish; skipped in auto mode.
     """
     if not auto and not ask_user('💭 Czy chcesz tłumaczyć pliki napisów? (T lub Y - tak):'):
         console.print('Pomijam tę opcję.\n', style='red_bold')
         return
 
+    already_polish = already_polish or set()
     main_subs_files = get_srt_files(WORKING_SPACE_TEMP_MAIN_SUBS)
     if auto:
-        files_to_translate = {filename: True for filename in main_subs_files}
+        files_to_translate: Dict[str, bool] = {}
+        for filename in main_subs_files:
+            if filename[:-4] in already_polish:
+                console.print(
+                    f'AUTO: pomijam tłumaczenie (napisy już PL): {filename}',
+                    style='green_bold')
+                files_to_translate[filename] = False
+            else:
+                files_to_translate[filename] = True
     else:
         files_to_translate = ask_to_translate_files(main_subs_files)
     translate_files(files_to_translate, settings)
@@ -349,7 +370,7 @@ def generate_audio_files(files_to_generate_audio: Dict[str, bool], settings: Set
             settings (Settings): The settings to use for audio generation.
     """
     audio_generator: SubtitleToSpeech
-    if 'TTS - *Głos* - ElevenLans' in settings.tts:
+    if settings.tts and 'TTS - *Głos* - ElevenLans' in settings.tts:
         audio_generator = SubtitleToSpeech('')
         audio_generator.srt_to_eac3_elevenlabs()
     else:
@@ -378,7 +399,7 @@ def process_output_files(settings: Settings):
             settings (Settings): The settings to use for processing.
     """
     files = listdir(WORKING_SPACE_OUTPUT)
-    files_dict = {path.splitext(file)[0]: [] for file in files}
+    files_dict: Dict[str, List[str]] = {path.splitext(file)[0]: [] for file in files}
     for file in files:
         if not file.endswith(('.mkv', '.mp4')):
             files_dict[path.splitext(file)[0]].append(file)
@@ -422,9 +443,9 @@ def main():
         console.print(
             'TRYB AUTOMATYCZNY — pipeline bez pytań.\n', style='green_bold')
     settings: Settings = update_settings(auto=auto)
-    extract_tracks_from_mkv(auto=auto)
+    already_polish: Set[str] = extract_tracks_from_mkv(auto=auto)
     refactor_subtitles(auto=auto)
-    translate_subtitles(settings, auto=auto)
+    translate_subtitles(settings, auto=auto, already_polish=already_polish)
     # Number-to-words conversion is skipped in auto mode by user preference.
     if not auto:
         convert_numbers_to_words()

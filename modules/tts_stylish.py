@@ -68,10 +68,10 @@ class StylishTTS:
 
     def _load_model(self) -> None:
         """Build model, load checkpoint shards, init phonemizer."""
-        from config_loader import load_model_config_yaml
-        from models.models import build_model
-        from models.export_model import ExportModel
-        from text_utils import TextCleaner
+        from config_loader import load_model_config_yaml  # type: ignore[import-not-found]
+        from models.models import build_model  # type: ignore[import-not-found]
+        from models.export_model import ExportModel  # type: ignore[import-not-found]
+        from text_utils import TextCleaner  # type: ignore[import-not-found]
 
         console.print("Ładowanie STylish-TTS-Pl...", style='blue_bold')
 

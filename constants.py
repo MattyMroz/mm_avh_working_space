@@ -82,7 +82,7 @@ if FFMPEG_FOLDER not in environ.get('PATH', ''):
 
 # Configure pydub to use local FFmpeg BEFORE any imports
 # This must be done before pydub is imported anywhere in the project
-from pydub import AudioSegment
+from pydub import AudioSegment  # noqa: E402
 AudioSegment.converter = FFMPEG_PATH
 AudioSegment.ffmpeg = FFMPEG_PATH
 AudioSegment.ffprobe = FFPROBE_PATH

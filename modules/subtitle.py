@@ -35,8 +35,6 @@ from os import makedirs, path, remove, stat
 from shutil import move
 from typing import List, Tuple
 
-from nltk.tokenize import sent_tokenize, word_tokenize
-from pyasstosrt import Subtitle
 from pysubs2 import load, SSAEvent, SSAFile
 
 from constants import (WORKING_SPACE,

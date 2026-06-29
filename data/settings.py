@@ -552,7 +552,7 @@ class Settings:
     def _get_elevenbytes_voice(settings: Optional['Settings']) -> Optional[str]:
         """Fetch available voices from ElevenBytes and let user choose or add custom."""
         try:
-            from modules.tts_elevenbytes import TTS as ElevenBytesTTS, VOICES
+            from modules.tts_elevenbytes import TTS as ElevenBytesTTS
         except Exception as exc:
             console.print(
                 f'\n[red_bold]Nie można zaimportować ElevenBytes: {exc}')
@@ -622,7 +622,7 @@ class Settings:
         """Prompt user for post-processing speed (atempo)."""
         pp_config = Config.get_post_processing()
         default = pp_config['default_pp_speed']
-        console.print(f'\n[yellow_bold]Post-processing (FFmpeg) — niezależne od modelu TTS:')
+        console.print('\n[yellow_bold]Post-processing (FFmpeg) — niezależne od modelu TTS:')
         console.print(f'  {pp_config["description_speed"]}')
         console.print('Wpisz przyspieszenie lektora (atempo): ', style='green_bold', end='')
         choice = input().strip()

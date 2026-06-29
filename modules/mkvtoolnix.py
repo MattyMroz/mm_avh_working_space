@@ -19,7 +19,7 @@
 import sys
 from subprocess import Popen, PIPE, CalledProcessError
 from json import loads
-from typing import Dict, List, Set
+from typing import Any, Dict, List, Set
 from os import path
 from dataclasses import dataclass
 
@@ -51,7 +51,7 @@ class MkvToolNix:
 
         Methods:
             - get_mkv_info(): Retrieves information about the MKV file using the mkvinfo tool.
-            - mkv_extract_track(data: Dict[str, any]): Extracts the specified tracks from the MKV file using the mkvextract tool.
+            - mkv_extract_track(data: Dict[str, Any]): Extracts the specified tracks from the MKV file using the mkvextract tool.
     """
     filename: str
     working_space: str = WORKING_SPACE
@@ -62,6 +62,7 @@ class MkvToolNix:
     mkv_merge_path: str = MKV_MERGE_PATH
     mkv_info_path: str = MKV_INFO_PATH
     mkv_propedit_path: str = MKV_PROPEDIT_PATH
+    subtitle_already_target_lang: bool = False
 
     def _check_executables(self) -> None:
         """
@@ -203,7 +204,7 @@ class MkvToolNix:
             )
         console.print()
 
-    def mkv_extract_track(self, data: Dict[str, any], auto_mode: bool = False) -> None:
+    def mkv_extract_track(self, data: Dict[str, Any], auto_mode: bool = False) -> None:
         """
             Extracts the specified tracks from the MKV file using the mkvextract tool.
 
@@ -215,7 +216,7 @@ class MkvToolNix:
             error message.
 
             Args:
-                - data (Dict[str, any]): A dictionary containing information about the MKV file.
+                - data (Dict[str, Any]): A dictionary containing information about the MKV file.
                 - auto_mode (bool): When True, pick the audio and subtitle tracks
                     automatically instead of asking the user. Defaults to False.
         """
@@ -226,7 +227,7 @@ class MkvToolNix:
 
         try:
             for track_id in tracks_to_extract:
-                track: str = data['tracks'][track_id]
+                track: Dict[str, Any] = data['tracks'][track_id]
                 codec_id: str = track['properties']['codec_id']
                 format_extension: str = self._get_format_extension(codec_id)
                 filename: str = f'{self.filename[:-4]}.{format_extension}'
@@ -250,12 +251,12 @@ class MkvToolNix:
         console.print(
             'Ekstrakcja zakończona pomyślnie.\n', style='green_bold')
 
-    def _prompt_tracks_to_extract(self, data: Dict[str, any]) -> Set[int]:
+    def _prompt_tracks_to_extract(self, data: Dict[str, Any]) -> Set[int]:
         """
             Prompts the user for the IDs of the tracks to extract.
 
             Args:
-                - data (Dict[str, any]): A dictionary containing information about the MKV file.
+                - data (Dict[str, Any]): A dictionary containing information about the MKV file.
 
             Returns:
                 - Set[int]: The set of valid track IDs the user chose to extract.
@@ -283,7 +284,7 @@ class MkvToolNix:
 
         return tracks_to_extract
 
-    def _auto_select_tracks(self, data: Dict[str, any]) -> Set[int]:
+    def _auto_select_tracks(self, data: Dict[str, Any]) -> Set[int]:
         """
             Picks the original audio and source subtitle track automatically.
 
@@ -293,7 +294,7 @@ class MkvToolNix:
             absent, in which case only the available track is extracted.
 
             Args:
-                - data (Dict[str, any]): A dictionary containing information about the MKV file.
+                - data (Dict[str, Any]): A dictionary containing information about the MKV file.
 
             Returns:
                 - Set[int]: The set of chosen track IDs (audio and/or subtitles).
@@ -314,6 +315,8 @@ class MkvToolNix:
             f'AUTO: ścieżka audio {audio_id if audio_id is not None else "brak"} ({audio_lang}), '
             f'napisy {sub_id if sub_id is not None else "brak"} ({sub_lang})',
             style='yellow_bold')
+
+        self.subtitle_already_target_lang = sub_lang in ('pol', 'pl')
 
         return tracks_to_extract
 

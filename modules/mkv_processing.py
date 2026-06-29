@@ -79,7 +79,7 @@ class MKVProcessing:
             'Wypal do mp4': self.mkv_burn_to_mp4,
         }
 
-        process_method: Optional[Callable] = options.get(settings.output)
+        process_method: Optional[Callable] = options.get(settings.output) if settings.output else None
         if process_method:
             console.print(
                 f'\nRozpoczynam przetwarzane pliku o nazwie: {self.filename}...', style='green_bold')

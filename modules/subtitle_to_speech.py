@@ -57,7 +57,7 @@ from data.settings import Settings
 from asyncio import create_task, gather, run, Semaphore, sleep as asyncio_sleep, TimeoutError
 from async_timeout import timeout as timeout_scope
 from natsort import natsorted
-from os import path, stat, listdir, remove
+from os import stat
 
 if sys.platform == "win32":
     import asyncio
@@ -751,7 +751,6 @@ class SubtitleToSpeech:
 
         ELEVENBYTES_SAMPLE_RATE: int = 44100
         HARD_TIMEOUT_S: float = 5 * 60 * 60  # 5h absolute limit
-        ROUND_COOLDOWN: float = 10.0
 
         self.ansi_srt()
         subtitles: pysrt.SubRipFile = pysrt.open(path.join(
