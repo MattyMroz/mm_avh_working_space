@@ -511,9 +511,9 @@ class Settings:
         current = settings.auto_mode if settings else False
         current_label = 'tak' if current else 'nie'
         console.print(
-            f'\nTryb automatyczny — pipeline bez pytań poza tym menu (T/N), '
-            f'obecnie: {current_label}')
-        console.print('Włączyć tryb automatyczny? (T/N): ',
+            f'\nCzy włączyć tryb automatyczny? (pipeline bez pytań poza tym menu, '
+            f'obecnie: {current_label})', style='yellow_bold')
+        console.print('(T lub Y - tak, N - nie, Enter - bez zmiany): ',
                       style='green_bold', end='')
         choice = input().strip().lower()
         if choice in ('t', 'y'):
