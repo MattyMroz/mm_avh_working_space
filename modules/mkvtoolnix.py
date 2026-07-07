@@ -251,10 +251,14 @@ class MkvToolNix:
                 command: List[str] = self._get_extract_command(
                     track_id, out_file)
 
-                with Popen(command) as process:
-                    self.console.print(
-                        f'\nEkstrakcja ścieżki {track_id} do pliku {filename}', style='yellow_bold')
-                    process.wait()
+                self.console.print(
+                    f'\nEkstrakcja ścieżki {track_id} do pliku {filename}', style='yellow_bold')
+                with Popen(command, stdout=PIPE, stderr=PIPE,
+                           universal_newlines=True, encoding='utf-8') as process:
+                    output, _ = process.communicate()
+                for line in output.splitlines():
+                    if line.strip() and not line.strip().startswith('Postęp:'):
+                        self.console.print(line)
 
         except (IndexError, KeyError):
             self.console.print(

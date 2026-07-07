@@ -115,16 +115,15 @@ def extract_tracks_from_mkv(auto: bool = False) -> Set[str]:  # ✅
     if not sorted_files:
         return already_polish
 
-    # Extraction is I/O-bound (mkvextract subprocess + disk), so threads scale it
-    # well on an SSD. A per-file failure must not abort the rest of the batch.
     polish_lock: Lock = Lock()
-    print_lock: Lock = Lock()
+    buffers: Dict[str, StringIO] = {}
 
     def _extract_one(filename: str) -> None:
-        # Auto buffers per-thread (clean parallel log); manual prints straight
-        # through because it has input() prompts.
+        # Auto buffers per-thread so the log can be flushed in file order later;
+        # manual prints straight through because it has input() prompts.
         if auto:
             buffer: StringIO = StringIO()
+            buffers[filename] = buffer
             thread_console: Console = Console(
                 file=buffer, color_system="truecolor", theme=CONSOLE_THEME,
                 force_terminal=True, width=console.size.width)
@@ -132,14 +131,7 @@ def extract_tracks_from_mkv(auto: bool = False) -> Set[str]:  # ✅
         else:
             mkv = MkvToolNix(filename)
 
-        try:
-            mkv.mkv_extract_track(mkv.get_mkv_info(), auto_mode=auto)
-        finally:
-            if auto:
-                with print_lock:
-                    console.file.write(buffer.getvalue())
-                    console.file.flush()
-
+        mkv.mkv_extract_track(mkv.get_mkv_info(), auto_mode=auto)
         if mkv.subtitle_already_target_lang:
             with polish_lock:
                 already_polish.add(filename[:-4])
@@ -152,9 +144,14 @@ def extract_tracks_from_mkv(auto: bool = False) -> Set[str]:  # ✅
             try:
                 future.result()
             except Exception as exc:
-                with print_lock:
-                    console.print(
-                        f'Błąd wypakowywania {name}: {exc}', style='red_bold')
+                console.print(f'Błąd wypakowywania {name}: {exc}', style='red_bold')
+
+    if auto:
+        for filename in sorted_files:
+            buffer = buffers.get(filename)
+            if buffer is not None:
+                console.file.write(buffer.getvalue())
+        console.file.flush()
 
     return already_polish
 
