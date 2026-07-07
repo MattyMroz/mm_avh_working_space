@@ -16,10 +16,11 @@
         }
 """
 
+import re
 import sys
 from subprocess import Popen, PIPE, CalledProcessError
 from json import loads
-from typing import Any, Dict, List, Set
+from typing import Any, Callable, Dict, List, Optional, Set
 from os import path, stat
 from dataclasses import dataclass, field
 
@@ -38,6 +39,8 @@ from modules.track_selector import select_audio_track, select_subtitle_track
 # Below this size an extracted track is treated as incomplete/garbage, so the
 # cache guard re-extracts it instead of trusting a truncated leftover file.
 MIN_EXTRACTED_BYTES: int = 1024
+
+_PROGRESS_RE: re.Pattern = re.compile(r'(?:Postęp|Progress):\s*(\d+)%')
 
 
 @dataclass(slots=True)
@@ -211,7 +214,8 @@ class MkvToolNix:
             )
         self.console.print()
 
-    def mkv_extract_track(self, data: Dict[str, Any], auto_mode: bool = False) -> None:
+    def mkv_extract_track(self, data: Dict[str, Any], auto_mode: bool = False,
+                          progress_callback: Optional[Callable[[int], None]] = None) -> None:
         """
             Extracts the specified tracks from the MKV file using the mkvextract tool.
 
@@ -226,6 +230,11 @@ class MkvToolNix:
                 - data (Dict[str, Any]): A dictionary containing information about the MKV file.
                 - auto_mode (bool): When True, pick the audio and subtitle tracks
                     automatically instead of asking the user. Defaults to False.
+                - progress_callback (Optional[Callable[[int], None]]): When given,
+                    mkvextract stdout is read live line by line and the callback is
+                    invoked with the current percent (0-100). When None, the raw
+                    output is printed to the console as before (keeps input()
+                    prompts of manual mode working).
         """
         if auto_mode:
             tracks_to_extract: Set[int] = self._auto_select_tracks(data)
@@ -243,13 +252,20 @@ class MkvToolNix:
                 # Skip re-extraction when a complete file is already there — this
                 # makes repeated runs skip the whole extraction of that track.
                 if path.isfile(out_file) and stat(out_file).st_size >= MIN_EXTRACTED_BYTES:
-                    self.console.print(
-                        f'Pomijam ekstrakcję (plik już istnieje): {filename}',
-                        style='green_bold')
+                    if progress_callback is not None:
+                        progress_callback(100)
+                    else:
+                        self.console.print(
+                            f'Pomijam ekstrakcję (plik już istnieje): {filename}',
+                            style='green_bold')
                     continue
 
                 command: List[str] = self._get_extract_command(
                     track_id, out_file)
+
+                if progress_callback is not None:
+                    self._extract_with_progress(command, progress_callback)
+                    continue
 
                 self.console.print(
                     f'\nEkstrakcja ścieżki {track_id} do pliku {filename}', style='yellow_bold')
@@ -276,8 +292,43 @@ class MkvToolNix:
             if not auto_mode:
                 self.mkv_extract_track(data)
 
-        self.console.print(
-            'Ekstrakcja zakończona pomyślnie.\n', style='green_bold')
+        if progress_callback is None:
+            self.console.print(
+                'Ekstrakcja zakończona pomyślnie.\n', style='green_bold')
+
+    def _extract_with_progress(self, command: List[str],
+                               progress_callback: Callable[[int], None]) -> None:
+        """
+            Runs mkvextract and streams progress live to the callback.
+
+            Reads stdout line by line (mkvextract prints "Postęp: N%" updates)
+            instead of buffering with communicate(), so each percent is reported
+            as it happens. mkvextract uses '\r' to overwrite the progress line, so
+            reads are split on both '\r' and '\n'.
+
+            Args:
+                - command (List[str]): The mkvextract command to run.
+                - progress_callback (Callable[[int], None]): Called with the
+                    current percent (0-100) on every progress update.
+        """
+        with Popen(command, stdout=PIPE, stderr=PIPE,
+                   universal_newlines=True, encoding='utf-8', bufsize=1) as process:
+            assert process.stdout is not None
+            buffer: str = ''
+            char: str = process.stdout.read(1)
+            while char:
+                if char in ('\r', '\n'):
+                    match = _PROGRESS_RE.search(buffer)
+                    if match:
+                        progress_callback(int(match.group(1)))
+                    buffer = ''
+                else:
+                    buffer += char
+                char = process.stdout.read(1)
+            match = _PROGRESS_RE.search(buffer)
+            if match:
+                progress_callback(int(match.group(1)))
+        progress_callback(100)
 
     def _prompt_tracks_to_extract(self, data: Dict[str, Any]) -> Set[int]:
         """

@@ -9,6 +9,9 @@ from typing import Dict, List, Set
 
 from natsort import natsorted
 from rich.console import Console
+from rich.progress import (BarColumn, Progress, SpinnerColumn,
+                           TaskProgressColumn, TextColumn)
+from rich.text import Text
 
 from constants import (WORKING_SPACE,
                        WORKING_SPACE_OUTPUT,
@@ -115,45 +118,101 @@ def extract_tracks_from_mkv(auto: bool = False) -> Set[str]:  # ✅
     if not sorted_files:
         return already_polish
 
+    if not auto:
+        polish_lock: Lock = Lock()
+
+        def _extract_one(filename: str) -> None:
+            mkv: MkvToolNix = MkvToolNix(filename)
+            mkv.mkv_extract_track(mkv.get_mkv_info(), auto_mode=False)
+            if mkv.subtitle_already_target_lang:
+                with polish_lock:
+                    already_polish.add(filename[:-4])
+
+        workers: int = _parallelism(len(sorted_files), cap=6)
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            future_map = {pool.submit(_extract_one, name): name for name in sorted_files}
+            for future in as_completed(future_map):
+                name = future_map[future]
+                try:
+                    future.result()
+                except Exception as exc:
+                    console.print(f'Błąd wypakowywania {name}: {exc}', style='red_bold')
+        return already_polish
+
+    return _extract_tracks_auto(sorted_files)
+
+
+def _extract_tracks_auto(sorted_files: List[str]) -> Set[str]:
+    """
+        Extracts tracks from every MKV file in parallel with a live progress bar.
+
+        Args:
+            sorted_files (List[str]): MKV file names to extract, in display order.
+
+        Returns:
+            Set[str]: Base file names whose subtitles are already Polish.
+    """
+    already_polish: Set[str] = set()
     polish_lock: Lock = Lock()
-    buffers: Dict[str, StringIO] = {}
 
-    def _extract_one(filename: str) -> None:
-        # Auto buffers per-thread so the log can be flushed in file order later;
-        # manual prints straight through because it has input() prompts.
-        if auto:
-            buffer: StringIO = StringIO()
-            buffers[filename] = buffer
-            thread_console: Console = Console(
-                file=buffer, color_system="truecolor", theme=CONSOLE_THEME,
-                force_terminal=True, width=console.size.width)
-            mkv: MkvToolNix = MkvToolNix(filename, console=thread_console)
-        else:
-            mkv = MkvToolNix(filename)
+    progress: Progress = Progress(
+        SpinnerColumn(),
+        TextColumn('[white_bold]{task.description}'),
+        BarColumn(),
+        TaskProgressColumn(),
+        console=console,
+    )
 
-        mkv.mkv_extract_track(mkv.get_mkv_info(), auto_mode=auto)
+    def _extract_one(filename: str, task_id: int) -> None:
+        buffer: StringIO = StringIO()
+        log: Console = Console(
+            file=buffer, color_system='truecolor', theme=CONSOLE_THEME,
+            force_terminal=True, width=console.size.width)
+        mkv: MkvToolNix = MkvToolNix(filename, console=log)
+        mkv.mkv_extract_track(
+            mkv.get_mkv_info(), auto_mode=True,
+            progress_callback=lambda pct: progress.update(task_id, completed=pct))
+        progress.update(task_id, completed=100)
+        progress.console.print(Text.from_ansi(buffer.getvalue().rstrip('\n')))
         if mkv.subtitle_already_target_lang:
             with polish_lock:
                 already_polish.add(filename[:-4])
 
     workers: int = _parallelism(len(sorted_files), cap=6)
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        future_map = {pool.submit(_extract_one, name): name for name in sorted_files}
-        for future in as_completed(future_map):
-            name = future_map[future]
-            try:
-                future.result()
-            except Exception as exc:
-                console.print(f'Błąd wypakowywania {name}: {exc}', style='red_bold')
-
-    if auto:
-        for filename in sorted_files:
-            buffer = buffers.get(filename)
-            if buffer is not None:
-                console.file.write(buffer.getvalue())
-        console.file.flush()
+    with progress:
+        task_ids: Dict[str, int] = {
+            name: progress.add_task(_task_label(name), total=100)
+            for name in sorted_files
+        }
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            future_map = {
+                pool.submit(_extract_one, name, task_ids[name]): name
+                for name in sorted_files
+            }
+            for future in as_completed(future_map):
+                name = future_map[future]
+                try:
+                    future.result()
+                except Exception as exc:
+                    progress.console.print(
+                        f'Błąd wypakowywania {name}: {exc}', style='red_bold')
 
     return already_polish
+
+
+def _task_label(filename: str, width: int = 40) -> str:
+    """
+        Builds the progress-bar label for a file, truncated to fit one line.
+
+        Args:
+            filename (str): The MKV file name.
+            width (int): Maximum label length before truncation.
+
+        Returns:
+            str: The (possibly shortened) label.
+    """
+    name: str = filename[:-4] if filename.endswith('.mkv') else filename
+    return name if len(name) <= width else name[:width - 1] + '…'
 
 
 def get_mkv_files(directory: str) -> List[str]:

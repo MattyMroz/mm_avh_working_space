@@ -47,6 +47,8 @@ from pathlib import Path
 import httpx
 
 log = logging.getLogger("elevenbytes")
+log.addHandler(logging.NullHandler())
+log.propagate = False
 
 # ─── Config ────────────────────────────────────────────────────────────────────
 
