@@ -256,9 +256,17 @@ class MkvToolNix:
                 with Popen(command, stdout=PIPE, stderr=PIPE,
                            universal_newlines=True, encoding='utf-8') as process:
                     output, _ = process.communicate()
-                for line in output.splitlines():
-                    if line.strip() and not line.strip().startswith('Postęp:'):
-                        self.console.print(line)
+                last_progress: str = ''
+                for line in output.replace('\r', '\n').splitlines():
+                    stripped: str = line.strip()
+                    if not stripped:
+                        continue
+                    if stripped.startswith('Postęp:'):
+                        last_progress = stripped
+                        continue
+                    self.console.print(line)
+                if last_progress:
+                    self.console.print(last_progress)
 
         except (IndexError, KeyError):
             self.console.print(
