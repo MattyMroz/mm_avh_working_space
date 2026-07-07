@@ -6,7 +6,7 @@ from os import cpu_count, listdir, makedirs, path
 from queue import Queue
 from shutil import rmtree
 from threading import Lock, Thread
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, TextIO, Tuple
 
 from natsort import natsorted
 from rich.console import Console
@@ -30,10 +30,6 @@ from modules.mkv_processing import MKVProcessing
 
 from utils.cool_animation import CoolAnimation
 from utils.execution_timer import execution_timer
-
-
-# Shared flush lock for standalone per-episode extraction calls.
-_EPISODE_PRINT_LOCK: Lock = Lock()
 
 
 def check_and_create_directories(directories: List[str]):  # ✅
@@ -120,23 +116,11 @@ def extract_one_episode(mkv_filename: str, dirs: Optional[Dict[str, str]] = None
     makedirs(dirs['main_subs'], exist_ok=True)
     makedirs(dirs['alt_subs'], exist_ok=True)
 
-    buffer: StringIO = StringIO()
-    thread_console: Console = Console(
-        file=buffer, color_system="truecolor", theme=CONSOLE_THEME,
-        force_terminal=True, width=console.size.width)
-    mkv: MkvToolNix = MkvToolNix(
-        mkv_filename,
-        working_space_temp=dirs['temp'],
-        console=thread_console)
-
-    try:
-        mkv.mkv_extract_track(mkv.get_mkv_info(), auto_mode=True)
-    finally:
-        # Flush each pre-rendered per-episode log block atomically so parallel
-        # auto-mode workers do not interleave their console output.
-        with _EPISODE_PRINT_LOCK:
-            console.file.write(buffer.getvalue())
-            console.file.flush()
+    # Output goes through the global console; when called inside the pipeline the
+    # console is routed to a per-thread buffer, so this episode's extraction log
+    # is captured and flushed as one block by the calling stage.
+    mkv: MkvToolNix = MkvToolNix(mkv_filename, working_space_temp=dirs['temp'])
+    mkv.mkv_extract_track(mkv.get_mkv_info(), auto_mode=True)
 
     return stem, mkv.subtitle_already_target_lang
 
@@ -316,19 +300,56 @@ def output_one_episode(stem: str, settings: Settings) -> None:
 _PIPELINE_DONE: object = object()
 
 
-def _log_episode(stem: str, message: str, style: str = 'blue_bold') -> None:
-    """Print a pipeline message tagged with the episode, atomically.
+class _PerThreadConsoleFile:
+    """Thread-aware stream so each pipeline stage's output stays a clean block.
 
-    Parallel pipeline stages share one console; the lock keeps a tagged line
-    from landing in the middle of another stage's output.
+    The three pipeline stages run concurrently but every module prints through
+    the one global Rich console. Without help their multi-line output interleaves
+    into an unreadable mess. This wraps the console's real stream: a thread that
+    has opted in (buffer()) accumulates its writes in a private in-memory buffer,
+    and flush_buffer() later writes the whole thing to the real stream in one
+    locked shot. Threads that never opt in (the main thread, manual mode) write
+    straight through — behaviour there is unchanged.
 
-    Args:
-        stem: Episode identifier shown as a prefix.
-        message: Text to print.
-        style: Rich style name.
+    Trade-off (chosen deliberately): a stage's output appears only once the whole
+    episode finishes, not live — in exchange for never interleaving with the two
+    other stages running at the same time.
     """
-    with _EPISODE_PRINT_LOCK:
-        console.print(f'[{stem}] {message}', style=style)
+
+    def __init__(self, real_file: TextIO) -> None:
+        self._real: TextIO = real_file
+        self._buffers: Dict[int, StringIO] = {}
+        self._lock: Lock = Lock()
+
+    def buffer(self) -> None:
+        """Start capturing the calling thread's output into a private buffer."""
+        from threading import get_ident
+        with self._lock:
+            self._buffers[get_ident()] = StringIO()
+
+    def flush_buffer(self) -> None:
+        """Emit the calling thread's captured output as one atomic block."""
+        from threading import get_ident
+        with self._lock:
+            captured: Optional[StringIO] = self._buffers.pop(get_ident(), None)
+            if captured is not None:
+                self._real.write(captured.getvalue())
+                self._real.flush()
+
+    def write(self, text: str) -> int:
+        from threading import get_ident
+        with self._lock:
+            target = self._buffers.get(get_ident())
+        if target is not None:
+            return target.write(text)
+        return self._real.write(text)
+
+    def flush(self) -> None:
+        from threading import get_ident
+        with self._lock:
+            buffered: bool = get_ident() in self._buffers
+        if not buffered:
+            self._real.flush()
 
 
 def run_auto_pipeline(settings: Settings) -> None:
@@ -362,18 +383,26 @@ def run_auto_pipeline(settings: Settings) -> None:
     audio_queue: "Queue[object]" = Queue()
     output_queue: "Queue[object]" = Queue()
 
+    # Route console output through a per-thread buffer so each stage's whole
+    # episode block is emitted atomically instead of interleaving with the two
+    # other stages. Restored to the real stream when the pipeline finishes.
+    real_file: TextIO = console.file
+    router: _PerThreadConsoleFile = _PerThreadConsoleFile(real_file)
+    console.file = router  # type: ignore[assignment]
+
     def _prep_stage() -> None:
         """Extract, refactor and translate each episode; feed the audio queue."""
         try:
             for mkv_filename in mkv_files:
                 stem: str = mkv_filename[:-4] if mkv_filename.endswith('.mkv') else mkv_filename
                 dirs: Dict[str, str] = episode_temp_dirs(stem)
+                router.buffer()
                 try:
-                    _log_episode(stem, 'Wypakowywanie...', style='yellow_bold')
+                    console.print(f'[{stem}] Wypakowywanie i tłumaczenie...',
+                                  style='yellow_bold')
                     resolved_stem, already_polish = extract_one_episode(mkv_filename, dirs)
                     refactor_one_episode(resolved_stem, dirs)
                     if not already_polish:
-                        _log_episode(resolved_stem, 'Tłumaczenie...', style='yellow_bold')
                         translate_one_main(resolved_stem, dirs, settings)
                     # Main is ready -> audio can start now, in parallel with the
                     # next episode's translation.
@@ -382,7 +411,9 @@ def run_auto_pipeline(settings: Settings) -> None:
                     if not already_polish:
                         translate_one_alt(resolved_stem, dirs, settings)
                 except Exception as exc:
-                    _log_episode(stem, f'Błąd (prep): {exc}', style='red_bold')
+                    console.print(f'[{stem}] Błąd (prep): {exc}', style='red_bold')
+                finally:
+                    router.flush_buffer()
         finally:
             audio_queue.put(_PIPELINE_DONE)
 
@@ -395,12 +426,15 @@ def run_auto_pipeline(settings: Settings) -> None:
                     break
                 stem = str(item)
                 dirs = episode_temp_dirs(stem)
+                router.buffer()
                 try:
-                    _log_episode(stem, 'Generowanie audio...', style='yellow_bold')
+                    console.print(f'[{stem}] Generowanie audio...', style='yellow_bold')
                     audio_one_episode(stem, dirs, settings)
                     output_queue.put(stem)
                 except Exception as exc:
-                    _log_episode(stem, f'Błąd (audio): {exc}', style='red_bold')
+                    console.print(f'[{stem}] Błąd (audio): {exc}', style='red_bold')
+                finally:
+                    router.flush_buffer()
         finally:
             output_queue.put(_PIPELINE_DONE)
 
@@ -411,20 +445,27 @@ def run_auto_pipeline(settings: Settings) -> None:
             if item is _PIPELINE_DONE:
                 break
             stem = str(item)
+            router.buffer()
             try:
-                _log_episode(stem, 'Przetwarzanie wyjścia...', style='yellow_bold')
+                console.print(f'[{stem}] Przetwarzanie wyjścia...', style='yellow_bold')
                 output_one_episode(stem, settings)
-                _log_episode(stem, 'Gotowe.', style='green_bold')
+                console.print(f'[{stem}] Gotowe.', style='green_bold')
             except Exception as exc:
-                _log_episode(stem, f'Błąd (wyjście): {exc}', style='red_bold')
+                console.print(f'[{stem}] Błąd (wyjście): {exc}', style='red_bold')
+            finally:
+                router.flush_buffer()
 
     prep: Thread = Thread(target=_prep_stage, name='prep')
     audio: Thread = Thread(target=_audio_stage, name='audio')
     output: Thread = Thread(target=_output_stage, name='output')
-    for thread in (prep, audio, output):
-        thread.start()
-    for thread in (prep, audio, output):
-        thread.join()
+    try:
+        for thread in (prep, audio, output):
+            thread.start()
+        for thread in (prep, audio, output):
+            thread.join()
+    finally:
+        # Always restore the real stream, even if a stage thread died.
+        console.file = real_file  # type: ignore[assignment]
 
 
 def extract_tracks_from_mkv(auto: bool = False) -> Set[str]:  # ✅
