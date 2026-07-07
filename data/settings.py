@@ -440,19 +440,21 @@ class Settings:
         return settings.elevenbytes_voice if settings else None
 
     @staticmethod
-    def _prompt_float_0_1(description: str, verb: str, default: str) -> str:
+    def _prompt_float_0_1(description: str, verb: str, current: str, default: str) -> str:
         """Ask for a 0.0–1.0 value in the project's prompt style.
 
         Args:
-            description: Full Polish label with range, e.g. 'Stabilność głosu'.
+            description: Full Polish label, e.g. 'Stabilność głosu'.
             verb: Short noun for the 'Wpisz ...:' line, e.g. 'stabilność'.
-            default: Current/default value shown to the user; kept on empty input.
+            current: Currently saved value shown to the user; kept on empty input.
+            default: Factory default value shown alongside the current one.
         """
-        console.print(f'\n{description} (0.0-1.0), obecna: {default}')
+        console.print(f'\n{description} (0.0-1.0)')
+        console.print(f'(obecna: {current}, domyślna: {default}, Enter = bez zmiany)')
         console.print(f'Wpisz {verb}: ', style='green_bold', end='')
         choice = input().strip()
         if not choice:
-            return default
+            return current
         try:
             val = float(choice)
             if 0.0 <= val <= 1.0:
@@ -462,28 +464,36 @@ class Settings:
         console.print('Niepoprawna wartość. Używam domyślnej wartości.', style='red_bold')
         return default
 
+    # Fabryczne domyślne voice_settings ElevenLabs v3 (bezpieczne dla modelu).
+    _V3_DEFAULT_STABILITY = '0.5'
+    _V3_DEFAULT_SIMILARITY = '0.75'
+    _V3_DEFAULT_STYLE = '0.0'
+    _V3_DEFAULT_BOOST = 'true'
+
     @staticmethod
     def _get_elevenbytes_v3_settings(
         settings: Optional['Settings'],
     ) -> tuple[str, str, str, str]:
         """Prompt user for ElevenLabs v3 voice_settings (stability, similarity_boost, style, speaker_boost).
 
-        Enter on any field keeps the previously saved value or the ElevenLabs-safe default.
-        Returns the four values as strings, ready to persist in settings.json.
+        Enter on any field keeps the currently saved value; the factory default is
+        shown alongside. Returns the four values as strings, ready to persist.
         """
         prev = settings if settings else None
-        default_stability = (prev.elevenbytes_stability if prev and prev.elevenbytes_stability else '0.5')
-        default_similarity = (prev.elevenbytes_similarity_boost if prev and prev.elevenbytes_similarity_boost else '0.75')
-        default_style = (prev.elevenbytes_style if prev and prev.elevenbytes_style else '0.0')
-        default_boost = (prev.elevenbytes_speaker_boost if prev and prev.elevenbytes_speaker_boost else 'true')
+        cur_stability = (prev.elevenbytes_stability if prev and prev.elevenbytes_stability else Settings._V3_DEFAULT_STABILITY)
+        cur_similarity = (prev.elevenbytes_similarity_boost if prev and prev.elevenbytes_similarity_boost else Settings._V3_DEFAULT_SIMILARITY)
+        cur_style = (prev.elevenbytes_style if prev and prev.elevenbytes_style else Settings._V3_DEFAULT_STYLE)
+        cur_boost = (prev.elevenbytes_speaker_boost if prev and prev.elevenbytes_speaker_boost else Settings._V3_DEFAULT_BOOST)
 
         console.print('\n[yellow_bold]Ustawienia głosu ElevenLabs v3 (Enter = bez zmiany):')
-        stability = Settings._prompt_float_0_1('Stabilność głosu', 'stabilność', default_stability)
-        similarity_boost = Settings._prompt_float_0_1('Podobieństwo do głosu', 'podobieństwo', default_similarity)
-        style = Settings._prompt_float_0_1('Ekspresja stylu', 'ekspresję', default_style)
+        stability = Settings._prompt_float_0_1('Stabilność głosu', 'stabilność', cur_stability, Settings._V3_DEFAULT_STABILITY)
+        similarity_boost = Settings._prompt_float_0_1('Podobieństwo do głosu', 'podobieństwo', cur_similarity, Settings._V3_DEFAULT_SIMILARITY)
+        style = Settings._prompt_float_0_1('Ekspresja stylu', 'ekspresję', cur_style, Settings._V3_DEFAULT_STYLE)
 
-        boost_label = 'tak' if default_boost == 'true' else 'nie'
-        console.print(f'\nWzmocnienie mówcy — wierność brzmienia (T/N), obecne: {boost_label}')
+        cur_boost_label = 'tak' if cur_boost == 'true' else 'nie'
+        def_boost_label = 'tak' if Settings._V3_DEFAULT_BOOST == 'true' else 'nie'
+        console.print('\nWzmocnienie mówcy — wierność brzmienia (T/N)')
+        console.print(f'(obecne: {cur_boost_label}, domyślne: {def_boost_label}, Enter = bez zmiany)')
         console.print('Włączyć wzmocnienie mówcy? (T/N): ', style='green_bold', end='')
         boost_choice = input().strip().lower()
         if boost_choice in ('t', 'y', 'true'):
@@ -491,7 +501,7 @@ class Settings:
         elif boost_choice in ('n', 'false'):
             speaker_boost = 'false'
         else:
-            speaker_boost = default_boost
+            speaker_boost = cur_boost
 
         return stability, similarity_boost, style, speaker_boost
 
@@ -535,14 +545,16 @@ class Settings:
         """Prompt user for post-processing speed (atempo)."""
         pp_config = Config.get_post_processing()
         default = pp_config['default_pp_speed']
+        current = settings.pp_speed if settings and settings.pp_speed else default
         console.print('\n[yellow_bold]Post-processing (FFmpeg) — niezależne od modelu TTS:')
-        console.print(f'  {pp_config["description_speed"]}')
-        console.print('Wpisz przyspieszenie lektora (atempo): ', style='green_bold', end='')
+        console.print('Przyspieszenie lektora (atempo) od 0.5 do 3.0')
+        console.print(f'(obecna: {current}, domyślna: {default}, Enter = bez zmiany)')
+        console.print('Wpisz przyspieszenie: ', style='green_bold', end='')
         choice = input().strip()
         if choice and Settings._is_valid_pp_speed(choice):
             return choice
         if not choice:
-            return settings.pp_speed if settings and settings.pp_speed else default
+            return current
         console.print('Niepoprawna wartość. Używam domyślnej wartości.', style='red_bold')
         return default
 
@@ -551,13 +563,15 @@ class Settings:
         """Prompt user for post-processing volume (dB)."""
         pp_config = Config.get_post_processing()
         default = pp_config['default_pp_volume']
-        console.print(f'  {pp_config["description_volume"]}')
-        console.print('Wpisz zmianę głośności lektora (dB): ', style='green_bold', end='')
+        current = settings.pp_volume if settings and settings.pp_volume else default
+        console.print('\nZmiana głośności lektora w dB (np. 0, 5, -3)')
+        console.print(f'(obecna: {current}, domyślna: {default}, Enter = bez zmiany)')
+        console.print('Wpisz głośność: ', style='green_bold', end='')
         choice = input().strip()
         if choice and Settings._is_valid_pp_volume(choice):
             return choice
         if not choice:
-            return settings.pp_volume if settings and settings.pp_volume else default
+            return current
         console.print('Niepoprawna wartość. Używam domyślnej wartości.', style='red_bold')
         return default
 

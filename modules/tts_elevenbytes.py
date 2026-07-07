@@ -47,10 +47,6 @@ from pathlib import Path
 import httpx
 
 log = logging.getLogger("elevenbytes")
-# Biblioteka nie loguje do konsoli — retry/500 raportuje warstwa wyżej (subtitle_to_speech)
-# w spójnym formacie. NullHandler + brak propagacji tłumi surowe "WARNING:elevenbytes:...".
-log.addHandler(logging.NullHandler())
-log.propagate = False
 
 # ─── Config ────────────────────────────────────────────────────────────────────
 
