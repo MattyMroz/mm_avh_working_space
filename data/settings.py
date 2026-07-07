@@ -27,7 +27,7 @@
 
 from dataclasses import asdict, dataclass
 from json import decoder, dump, load
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from constants import SETTINGS_PATH, console
 from data.config import Config
@@ -52,16 +52,16 @@ class Settings:
 
         Methods:
             - load_from_file(cls, settings_path: str) -> 'Settings': Load settings from a file.
-            - _set_option(prompt: str, options: List[Dict[str, str]]) -> str | None: Set an option from a list of options.
-            - _is_valid_speed(speed: str, tts: str) -> bool: Check if a given speed value is valid for the selected TTS engine.
-            - _is_valid_volume(volume: str, tts: str) -> bool: Check if a given volume value is valid for the selected TTS engine.
+            - _set_option(prompt: str, options: List[Dict[str, Any]]) -> Optional[str]: Set an option from a list of options.
+            - _is_valid_speed(speed: str, tts: Optional[str]) -> bool: Check if a given speed value is valid for the selected TTS engine.
+            - _is_valid_volume(volume: str, tts: Optional[str]) -> bool: Check if a given volume value is valid for the selected TTS engine.
             - _get_translator(settings: Optional['Settings']) -> Optional[str]: Get the selected translator.
             - _get_deepl_api_key(settings: Optional['Settings']) -> Optional[str]: Get the DeepL API key.
             - _get_translated_line_count(settings: Optional['Settings']) -> Optional[str]: Get the number of translated lines.
             - _get_tts(settings: Optional['Settings']) -> Optional[str]: Get the selected TTS engine.
-            - _get_default_speed_volume(tts: str) -> Tuple[Optional[str], Optional[str]]: Get the default speed and volume for a TTS engine.
-            - _get_tts_speed(tts: str, default_speed: Optional[str]) -> Optional[str]: Get the TTS speed.
-            - _get_tts_volume(tts: str, default_volume: Optional[str]) -> Optional[str]: Get the TTS volume.
+            - _get_default_speed_volume(tts: Optional[str]) -> Tuple[Optional[str], Optional[str]]: Get the default speed and volume for a TTS engine.
+            - _get_tts_speed(tts: Optional[str], default_speed: Optional[str]) -> Optional[str]: Get the TTS speed.
+            - _get_tts_volume(tts: Optional[str], default_volume: Optional[str]) -> Optional[str]: Get the TTS volume.
             - _get_output(settings: Optional['Settings']) -> Optional[str]: Get the selected output option.
             - get_user_settings(settings_path: str) -> Optional['Settings']: Get user settings from a file.
             - change_settings_save_to_file(settings_path: str) -> None: Change and save settings to a file.
@@ -72,44 +72,15 @@ class Settings:
     tts: Optional[str] = None
     tts_speed: Optional[str] = None
     tts_volume: Optional[str] = None
-    fish_voice: Optional[str] = None
-    fish_temperature: Optional[str] = None
-    readlover_api_key: Optional[str | List[str]] = None
-    readlover_speaker_id: Optional[str] = None
-    readlover_preset: Optional[str] = None
     elevenbytes_voice: Optional[str] = None
+    elevenbytes_stability: Optional[str] = None
+    elevenbytes_similarity_boost: Optional[str] = None
+    elevenbytes_style: Optional[str] = None
+    elevenbytes_speaker_boost: Optional[str] = None
     pp_speed: Optional[str] = None
     pp_volume: Optional[str] = None
     output: Optional[str] = None
     auto_mode: bool = False
-
-    @staticmethod
-    def _normalize_readlover_api_keys(api_keys: Optional[str | List[str]]) -> List[str]:
-        """Normalize one or many ReadLover API keys into a de-duplicated list."""
-        if api_keys is None:
-            return []
-
-        if isinstance(api_keys, str):
-            raw_keys = api_keys.replace(',', '\n').replace(';', '\n').splitlines()
-        else:
-            raw_keys = [str(value) for value in api_keys]
-
-        normalized_keys: List[str] = []
-        for raw_key in raw_keys:
-            cleaned_key = raw_key.strip()
-            if cleaned_key and cleaned_key not in normalized_keys:
-                normalized_keys.append(cleaned_key)
-        return normalized_keys
-
-    @staticmethod
-    def _coerce_readlover_api_keys(api_keys: Optional[str | List[str]]) -> Optional[str | List[str]]:
-        """Return None, one key, or a list of keys depending on input."""
-        normalized_keys = Settings._normalize_readlover_api_keys(api_keys)
-        if not normalized_keys:
-            return None
-        if len(normalized_keys) == 1:
-            return normalized_keys[0]
-        return normalized_keys
 
     @classmethod
     def load_from_file(cls, settings_path: str = SETTINGS_PATH) -> 'Settings':
@@ -163,12 +134,11 @@ class Settings:
             tts=data.get('tts'),
             tts_speed=data.get('tts_speed'),
             tts_volume=data.get('tts_volume'),
-            fish_voice=data.get('fish_voice'),
-            fish_temperature=data.get('fish_temperature'),
-            readlover_api_key=Settings._coerce_readlover_api_keys(data.get('readlover_api_key')),
-            readlover_speaker_id=data.get('readlover_speaker_id'),
-            readlover_preset=data.get('readlover_preset'),
             elevenbytes_voice=data.get('elevenbytes_voice'),
+            elevenbytes_stability=data.get('elevenbytes_stability'),
+            elevenbytes_similarity_boost=data.get('elevenbytes_similarity_boost'),
+            elevenbytes_style=data.get('elevenbytes_style'),
+            elevenbytes_speaker_boost=data.get('elevenbytes_speaker_boost'),
             pp_speed=data.get('pp_speed', pp_defaults['default_pp_speed']),
             pp_volume=data.get('pp_volume', pp_defaults['default_pp_volume']),
             output=data.get('output'),
@@ -176,16 +146,16 @@ class Settings:
         )
 
     @staticmethod
-    def _set_option(prompt: str, options: List[Dict[str, str]]) -> str | None:
+    def _set_option(prompt: str, options: List[Dict[str, Any]]) -> Optional[str]:
         """
             Set an option from a list of options.
 
             Args:
                 - prompt (str): The prompt to display to the user.
-                - options (List[Dict[str, str]]): The list of options to choose from.
+                - options (List[Dict[str, Any]]): The list of options to choose from.
 
             Returns:
-                - str | None: The selected option, or None if the selection is invalid.
+                - Optional[str]: The selected option, or None if the selection is invalid.
         """
         console.print(f'\n{prompt}', style='yellow_bold')
         for i, option in enumerate(options):
@@ -219,13 +189,13 @@ class Settings:
         return None
 
     @staticmethod
-    def _is_valid_speed(speed: str, tts: str) -> bool:
+    def _is_valid_speed(speed: str, tts: Optional[str]) -> bool:
         """
             Check if a given speed value is valid for the selected TTS engine.
 
             Args:
                 - speed (str): The speed value to check.
-                - tts (str): The selected TTS engine.
+                - tts (Optional[str]): The selected TTS engine.
 
             Returns:
                 - bool: True if the speed value is valid, False otherwise.
@@ -240,13 +210,13 @@ class Settings:
         return False
 
     @staticmethod
-    def _is_valid_volume(volume: str, tts: str) -> bool:
+    def _is_valid_volume(volume: str, tts: Optional[str]) -> bool:
         """
             Check if a given volume value is valid for the selected TTS engine.
 
             Args:
                 - volume (str): The volume value to check.
-                - tts (str): The selected TTS engine.
+                - tts (Optional[str]): The selected TTS engine.
 
             Returns:
                 - bool: True if the volume value is valid, False otherwise.
@@ -298,7 +268,7 @@ class Settings:
                 'Klucz API DeepL można wygenerować na stronie https://www.deepl.com/pro-api', style='yellow_bold')
             console.print('Podaj klucz API DeepL: ',
                           style='green_bold', end='')
-            deepl_api_key = input('')
+            deepl_api_key: Optional[str] = input('')
             if deepl_api_key == '':
                 deepl_api_key = settings.deepl_api_key if settings else None
                 console.print(
@@ -344,12 +314,12 @@ class Settings:
         return tts
 
     @staticmethod
-    def _get_default_speed_volume(tts: str) -> Tuple[Optional[str], Optional[str]]:
+    def _get_default_speed_volume(tts: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
         """
             Retrieve the default voice speed and volume for the specified TTS engine.
 
             Args:
-                - tts (str): The selected TTS engine.
+                - tts (Optional[str]): The selected TTS engine.
 
             Returns:
                 - Tuple[Optional[str], Optional[str]]: A tuple containing the default voice speed and volume,
@@ -366,12 +336,12 @@ class Settings:
         return default_speed, default_volume
 
     @staticmethod
-    def _get_tts_speed(tts: str, default_speed: Optional[str]) -> Optional[str]:
+    def _get_tts_speed(tts: Optional[str], default_speed: Optional[str]) -> Optional[str]:
         """
             Prompt the user to enter the voice speed for the selected TTS engine, or use the default speed.
 
             Args:
-                - tts (str): The selected TTS engine.
+                - tts (Optional[str]): The selected TTS engine.
                 - default_speed (Optional[str]): The default voice speed for the TTS engine.
 
             Returns:
@@ -392,12 +362,12 @@ class Settings:
         return tts_speed
 
     @staticmethod
-    def _get_tts_volume(tts: str, default_volume: Optional[str]) -> Optional[str]:
+    def _get_tts_volume(tts: Optional[str], default_volume: Optional[str]) -> Optional[str]:
         """
             Prompt the user to enter the voice volume for the selected TTS engine, or use the default volume.
 
             Args:
-                - tts (str): The selected TTS engine.
+                - tts (Optional[str]): The selected TTS engine.
                 - default_volume (Optional[str]): The default voice volume for the TTS engine.
 
             Returns:
@@ -417,136 +387,6 @@ class Settings:
                 'Niepoprawna wartość głośności. Używam domyślnej wartości.', style='red_bold')
             tts_volume = default_volume
         return tts_volume
-
-    @staticmethod
-    def _get_fish_voice(settings: Optional['Settings']) -> Optional[str]:
-        """Fetch available voices from Fish Audio API and let user choose."""
-        try:
-            from modules.tts_fish_api import FishTTSClient
-            voices = FishTTSClient.get_voices_static()
-        except Exception as exc:
-            console.print(
-                f'\n[red_bold]Nie można pobrać głosów z Fish Audio API: {exc}')
-            console.print(
-                '[red_bold]Upewnij się, że serwer Fish Audio działa na http://127.0.0.1:8855')
-            return settings.fish_voice if settings else None
-
-        if not voices:
-            console.print(
-                '\n[red_bold]Brak dostępnych głosów w Fish Audio API.')
-            return settings.fish_voice if settings else None
-
-        console.print('\n[yellow_bold]Dostępne głosy Fish Audio:')
-        for i, voice in enumerate(voices):
-            console.print(
-                f'[yellow_bold]{i + 1}.[/yellow_bold] [white]{voice["name"]}')
-        console.print('Wybierz głos: ', style='green_bold', end='')
-        choice = input().strip()
-        if choice.isdigit():
-            idx = int(choice) - 1
-            if 0 <= idx < len(voices):
-                selected = voices[idx]['name']
-                console.print(f'Wybrano głos: {selected}', style='yellow_bold')
-                return selected
-        console.print(
-            'Niepoprawny wybór. Nie zmieniono wartości!', style='red_bold')
-        return settings.fish_voice if settings else None
-
-    @staticmethod
-    def _get_fish_temperature(settings: Optional['Settings']) -> Optional[str]:
-        """Prompt user for Fish Audio temperature (0.0-1.0)."""
-        default = settings.fish_temperature if settings and settings.fish_temperature else '0.8'
-        console.print(
-            '\n[yellow_bold]Temperature Fish Audio (ekspresyjność głosu):')
-        console.print(
-            '  Zakres: 0.0 (monotonny) — 1.0 (ekspresyjny), domyślna: 0.8')
-        console.print('Wpisz temperature: ', style='green_bold', end='')
-        choice = input().strip()
-        if choice:
-            try:
-                val = float(choice)
-                if 0.0 <= val <= 1.0:
-                    return choice
-            except ValueError:
-                pass
-            console.print(
-                'Niepoprawna wartość. Używam domyślnej wartości.', style='red_bold')
-        return default
-
-    @staticmethod
-    def _get_readlover_api_key(settings: Optional['Settings']) -> Optional[str | List[str]]:
-        """Prompt user for ReadLover API key."""
-        console.print(
-            '\nCzy chcesz ustawić klucz API ReadLover?', style='yellow_bold')
-        console.print('(T lub Y - tak): ', style='green_bold', end='')
-        if input().lower() in ('t', 'y'):
-            console.print(
-                'Klucze API ReadLover (format: rl_live_..., wiele kluczy oddziel przecinkiem)', style='yellow_bold')
-            console.print('Podaj klucz lub klucze API ReadLover: ',
-                          style='green_bold', end='')
-            api_keys = Settings._coerce_readlover_api_keys(input().strip())
-            if api_keys:
-                return api_keys
-            console.print(
-                'Niepoprawna wartość. Nie zmieniono wartości!', style='red_bold')
-        return Settings._coerce_readlover_api_keys(settings.readlover_api_key) if settings else None
-
-    @staticmethod
-    def _get_readlover_voice(settings: Optional['Settings'], api_key: Optional[str | List[str]]) -> Optional[str]:
-        """Fetch available voices from ReadLover API and let user choose."""
-        if not api_key:
-            console.print(
-                '\n[red_bold]Brak klucza API ReadLover — nie można pobrać głosów.')
-            return settings.readlover_speaker_id if settings else None
-        try:
-            from modules.tts_readlover import ReadLoverClient
-            voices = ReadLoverClient.get_voices_static(api_key)
-        except Exception as exc:
-            console.print(
-                f'\n[red_bold]Nie można pobrać głosów z ReadLover API: {exc}')
-            return settings.readlover_speaker_id if settings else None
-
-        if not voices:
-            console.print(
-                '\n[red_bold]Brak dostępnych głosów w ReadLover API.')
-            return settings.readlover_speaker_id if settings else None
-
-        console.print('\n[yellow_bold]Dostępne głosy ReadLover:')
-        for i, voice in enumerate(voices):
-            lang = voice.get('language_name') or voice.get('language', '')
-            console.print(
-                f'[yellow_bold]{i + 1}.[/yellow_bold] [white]{voice["name"]} ({lang})')
-        console.print('Wybierz głos: ', style='green_bold', end='')
-        choice = input().strip()
-        if choice.isdigit():
-            idx = int(choice) - 1
-            if 0 <= idx < len(voices):
-                selected_id = str(voices[idx]['id'])
-                console.print(
-                    f'Wybrano głos: {voices[idx]["name"]}', style='yellow_bold')
-                return selected_id
-        console.print(
-            'Niepoprawny wybór. Nie zmieniono wartości!', style='red_bold')
-        return settings.readlover_speaker_id if settings else None
-
-    @staticmethod
-    def _get_readlover_preset(settings: Optional['Settings']) -> Optional[str]:
-        """Prompt user for ReadLover preset (neutral/expressive)."""
-        default = settings.readlover_preset if settings and settings.readlover_preset else 'neutral'
-        console.print('\n[yellow_bold]Preset ReadLover:')
-        console.print('  1. neutral (domyślny)')
-        console.print('  2. expressive')
-        console.print('Wybierz preset: ', style='green_bold', end='')
-        choice = input().strip()
-        if choice == '1' or choice.lower() == 'neutral':
-            return 'neutral'
-        if choice == '2' or choice.lower() == 'expressive':
-            return 'expressive'
-        if not choice:
-            return default
-        console.print(
-            'Niepoprawny wybór. Używam domyślnego.', style='red_bold')
-        return default
 
     @staticmethod
     def _get_elevenbytes_voice(settings: Optional['Settings']) -> Optional[str]:
@@ -598,6 +438,73 @@ class Settings:
         console.print(
             'Niepoprawny wybór. Nie zmieniono wartości!', style='red_bold')
         return settings.elevenbytes_voice if settings else None
+
+    @staticmethod
+    def _prompt_float_0_1(label: str, default: str) -> str:
+        """Ask for a 0.0–1.0 value; Enter keeps default, bad input warns and keeps default."""
+        console.print(
+            f'  {label} (0.0–1.0) [{default}]: ', style='green_bold', end='')
+        choice = input().strip()
+        if not choice:
+            return default
+        try:
+            val = float(choice)
+            if 0.0 <= val <= 1.0:
+                return choice
+        except ValueError:
+            pass
+        console.print('  Niepoprawna wartość. Używam domyślnej.', style='red_bold')
+        return default
+
+    @staticmethod
+    def _get_elevenbytes_v3_settings(
+        settings: Optional['Settings'],
+    ) -> tuple[str, str, str, str]:
+        """Prompt user for ElevenLabs v3 voice_settings (stability, similarity_boost, style, speaker_boost).
+
+        Enter on any field keeps the previously saved value or the ElevenLabs-safe default.
+        Returns the four values as strings, ready to persist in settings.json.
+        """
+        prev = settings if settings else None
+        default_stability = (prev.elevenbytes_stability if prev and prev.elevenbytes_stability else '0.5')
+        default_similarity = (prev.elevenbytes_similarity_boost if prev and prev.elevenbytes_similarity_boost else '0.75')
+        default_style = (prev.elevenbytes_style if prev and prev.elevenbytes_style else '0.0')
+        default_boost = (prev.elevenbytes_speaker_boost if prev and prev.elevenbytes_speaker_boost else 'true')
+
+        console.print('\n[yellow_bold]Ustawienia głosu ElevenLabs v3 (Enter = domyślne):')
+        stability = Settings._prompt_float_0_1('stability', default_stability)
+        similarity_boost = Settings._prompt_float_0_1('similarity_boost', default_similarity)
+        style = Settings._prompt_float_0_1('style', default_style)
+
+        console.print(
+            f'  use_speaker_boost (t/n) [{default_boost}]: ', style='green_bold', end='')
+        boost_choice = input().strip().lower()
+        if boost_choice in ('t', 'y', 'true'):
+            speaker_boost = 'true'
+        elif boost_choice in ('n', 'false'):
+            speaker_boost = 'false'
+        else:
+            speaker_boost = default_boost
+
+        return stability, similarity_boost, style, speaker_boost
+
+    @staticmethod
+    def _get_auto_mode(settings: Optional['Settings']) -> bool:
+        """Prompt user to toggle unattended auto mode (T/N). Enter keeps current value."""
+        current = settings.auto_mode if settings else False
+        current_label = 'włączony' if current else 'wyłączony'
+        console.print(
+            f'\n[yellow_bold]Tryb automatyczny (obecnie: {current_label}) — '
+            f'pipeline bez pytań poza tym menu.')
+        console.print(
+            'Włączyć tryb automatyczny? (T/Y - tak, N - nie, Enter - bez zmian): ',
+            style='green_bold', end='')
+        choice = input().strip().lower()
+        if choice in ('t', 'y'):
+            return True
+        if choice in ('n',):
+            return False
+        return current
 
     @staticmethod
     def _is_valid_pp_speed(speed: str) -> bool:
@@ -686,17 +593,40 @@ class Settings:
         tts = Settings._get_tts(settings)
         default_speed, default_volume = Settings._get_default_speed_volume(tts)
         console.print(f'\nWybrałeś: {tts}', style='yellow_bold')
-        tts_speed = Settings._get_tts_speed(tts, default_speed)
-        tts_volume = Settings._get_tts_volume(tts, default_volume)
-        fish_voice = Settings._get_fish_voice(settings) if tts == 'TTS - Fish Audio API' else (settings.fish_voice if settings else None)
-        fish_temperature = Settings._get_fish_temperature(settings) if tts == 'TTS - Fish Audio API' else (settings.fish_temperature if settings else None)
-        readlover_api_key = Settings._get_readlover_api_key(settings) if tts == 'TTS - ReadLover API' else (settings.readlover_api_key if settings else None)
-        readlover_speaker_id = Settings._get_readlover_voice(settings, readlover_api_key) if tts == 'TTS - ReadLover API' else (settings.readlover_speaker_id if settings else None)
-        readlover_preset = Settings._get_readlover_preset(settings) if tts == 'TTS - ReadLover API' else (settings.readlover_preset if settings else None)
-        elevenbytes_voice = Settings._get_elevenbytes_voice(settings) if tts == 'TTS - ElevenBytes' else (settings.elevenbytes_voice if settings else None)
+        # Silniki z prędkością/głośnością 'auto' (ElevenBytes itp.) nie mają tych
+        # ustawień — nie pytamy o nie, tylko przyjmujemy 'auto'.
+        tts_speed = 'auto' if default_speed == 'auto' else Settings._get_tts_speed(tts, default_speed)
+        tts_volume = 'auto' if default_volume == 'auto' else Settings._get_tts_volume(tts, default_volume)
+
+        is_elevenbytes = tts in (
+            'TTS - ElevenBytes (ElevenLabs v2)',
+            'TTS - ElevenBytes (ElevenLabs v3)',
+        )
+        is_elevenbytes_v3 = tts == 'TTS - ElevenBytes (ElevenLabs v3)'
+
+        elevenbytes_voice = (
+            Settings._get_elevenbytes_voice(settings) if is_elevenbytes
+            else (settings.elevenbytes_voice if settings else None)
+        )
+        # voice_settings dotyczą wyłącznie v3 (run7). Dla v2 zachowujemy zapisane wartości.
+        elevenbytes_stability: Optional[str]
+        elevenbytes_similarity_boost: Optional[str]
+        elevenbytes_style: Optional[str]
+        elevenbytes_speaker_boost: Optional[str]
+        if is_elevenbytes_v3:
+            (elevenbytes_stability, elevenbytes_similarity_boost,
+             elevenbytes_style, elevenbytes_speaker_boost) = (
+                Settings._get_elevenbytes_v3_settings(settings))
+        else:
+            elevenbytes_stability = settings.elevenbytes_stability if settings else None
+            elevenbytes_similarity_boost = settings.elevenbytes_similarity_boost if settings else None
+            elevenbytes_style = settings.elevenbytes_style if settings else None
+            elevenbytes_speaker_boost = settings.elevenbytes_speaker_boost if settings else None
+
         pp_speed = Settings._get_pp_speed(settings)
         pp_volume = Settings._get_pp_volume(settings)
         output = Settings._get_output(settings)
+        auto_mode = Settings._get_auto_mode(settings)
 
         return Settings(
             translator=translator,
@@ -705,17 +635,15 @@ class Settings:
             tts=tts,
             tts_speed=tts_speed,
             tts_volume=tts_volume,
-            fish_voice=fish_voice,
-            fish_temperature=fish_temperature,
-            readlover_api_key=readlover_api_key,
-            readlover_speaker_id=readlover_speaker_id,
-            readlover_preset=readlover_preset,
             elevenbytes_voice=elevenbytes_voice,
+            elevenbytes_stability=elevenbytes_stability,
+            elevenbytes_similarity_boost=elevenbytes_similarity_boost,
+            elevenbytes_style=elevenbytes_style,
+            elevenbytes_speaker_boost=elevenbytes_speaker_boost,
             pp_speed=pp_speed,
             pp_volume=pp_volume,
             output=output,
-            # Preserve auto_mode across an interactive edit (it has no menu entry).
-            auto_mode=settings.auto_mode if settings else False
+            auto_mode=auto_mode,
         )
 
     @staticmethod
@@ -730,6 +658,7 @@ class Settings:
         """
 
         settings = Settings.get_user_settings(settings_path)
+        assert settings is not None
 
         with open(settings_path, 'w', encoding='utf-8') as file:
             dump(asdict(settings), file, indent=4)

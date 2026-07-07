@@ -12,7 +12,7 @@
 """
 
 from dataclasses import dataclass
-from typing import List, Dict
+from typing import Any, List, Dict
 
 
 @dataclass(slots=True)
@@ -23,7 +23,7 @@ class Config:
     Methods:
         - get_translators() -> List[Dict[str, str]] - Returns a list of available translators.
         - get_translation_options() -> List[Dict[str, str]] - Returns a list of available translation options.
-        - get_voice_actors() -> List[Dict[str, str]] - Returns a list of available voice actors for text-to-speech.
+        - get_voice_actors() -> List[Dict[str, Any]] - Returns a list of available voice actors for text-to-speech.
         - get_output() -> List[Dict[str, str]] - Returns a list of available output options.
     """
 
@@ -42,7 +42,6 @@ class Config:
         return [
             {'name': 'Google Translate'},
             {'name': 'DeepL API'},
-            {'name': 'DeepL Desktop Free'},
         ]
 
     @staticmethod
@@ -70,7 +69,7 @@ class Config:
         ]
 
     @staticmethod
-    def get_voice_actors() -> List[Dict[str, str]]:
+    def get_voice_actors() -> List[Dict[str, Any]]:
         """
         Returns a list of available voice actors for text-to-speech.
 
@@ -84,7 +83,7 @@ class Config:
             - 'default_voice_volume': The default volume of the voice actor.
 
         Returns:
-            List[Dict[str, str]]: A list of voice actors.
+            List[Dict[str, Any]]: A list of voice actors.
         """
         return [
             {
@@ -132,31 +131,9 @@ class Config:
                 },
             },
             {
-                'name': 'TTS - *Głos* - ElevenLans',
+                'name': 'TTS - ElevenBytes (ElevenLabs v2)',
                 'description': {
                     'speed': 'Szybkość głosu: Auto',
-                    'volume': 'Głośność głou: Auto',
-                },
-                'default_options': {
-                    'default_voice_speed': 'auto',
-                    'default_voice_volume': 'auto',
-                },
-            },
-            {
-                'name': 'TTS - STylish - PL',
-                'description': {
-                    'speed': 'Szybkość głosu od 0.5 do 2.0, domyślna: 1.0',
-                    'volume': 'Głośność głosu: Auto',
-                },
-                'default_options': {
-                    'default_voice_speed': '1.0',
-                    'default_voice_volume': 'auto',
-                },
-            },
-            {
-                'name': 'TTS - Fish Audio API',
-                'description': {
-                    'speed': 'Szybkość głosu: Auto (kontrolowana przez temperature)',
                     'volume': 'Głośność głosu: Auto',
                 },
                 'default_options': {
@@ -165,18 +142,7 @@ class Config:
                 },
             },
             {
-                'name': 'TTS - ReadLover API',
-                'description': {
-                    'speed': 'Szybkość głosu (length_scale) od 0.1 do 4.0, domyślna: 1.0',
-                    'volume': 'Głośność głosu: Auto',
-                },
-                'default_options': {
-                    'default_voice_speed': '1.0',
-                    'default_voice_volume': 'auto',
-                },
-            },
-            {
-                'name': 'TTS - ElevenBytes',
+                'name': 'TTS - ElevenBytes (ElevenLabs v3)',
                 'description': {
                     'speed': 'Szybkość głosu: Auto',
                     'volume': 'Głośność głosu: Auto',

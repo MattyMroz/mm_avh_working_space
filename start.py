@@ -65,21 +65,22 @@ def ask_user(question: str) -> bool:
         sys.exit(0)
 
 
-def update_settings(auto: bool = False) -> Settings:  # ✅
+def update_settings() -> Settings:  # ✅
     """
         Asks the user if they want to update the settings. If yes, updates the settings and saves them to a file.
 
-        Args:
-            auto: When True, skips the prompt and loads settings as-is
-                (unattended auto mode makes no interactive changes).
+        The settings prompt is ALWAYS shown, even when auto_mode is saved — otherwise
+        a saved auto_mode=true would trap the user with no way to reach the settings
+        menu (auto_mode has no menu entry). Auto only skips the rest of the pipeline
+        prompts, never this one.
 
         Returns:
             Settings: The updated settings.
     """
-    if not auto and ask_user('💾 Czy chcesz zmienić ustawienia? (T lub Y - tak):'):
+    if ask_user('💾 Czy chcesz zmienić ustawienia? (T lub Y - tak):'):
         Settings.change_settings_save_to_file()
         console.print('Zapisano ustawienia.\n', style='green_bold')
-    elif not auto:
+    else:
         console.print('Pomijam tę opcję.\n', style='red_bold')
     return Settings.load_from_file()
 
@@ -370,14 +371,10 @@ def generate_audio_files(files_to_generate_audio: Dict[str, bool], settings: Set
             settings (Settings): The settings to use for audio generation.
     """
     audio_generator: SubtitleToSpeech
-    if settings.tts and 'TTS - *Głos* - ElevenLans' in settings.tts:
-        audio_generator = SubtitleToSpeech('')
-        audio_generator.srt_to_eac3_elevenlabs()
-    else:
-        for filename, should_generate_audio in files_to_generate_audio.items():
-            if should_generate_audio:
-                audio_generator = SubtitleToSpeech(filename)
-                audio_generator.generate_audio(settings)
+    for filename, should_generate_audio in files_to_generate_audio.items():
+        if should_generate_audio:
+            audio_generator = SubtitleToSpeech(filename)
+            audio_generator.generate_audio(settings)
 
 
 def refactor_alt_subtitles():  # ✅
@@ -437,12 +434,14 @@ def main():
         (the user's preference). Otherwise the interactive flow is unchanged.
     """
     display_logo()
-    # Read auto_mode before update_settings so the settings prompt is skipped too.
-    auto: bool = Settings.load_from_file().auto_mode
+    # Settings prompt is always shown first (even in auto mode), so the user can
+    # always reach the menu. auto_mode is read AFTER, from the possibly-updated
+    # settings, and governs only the rest of the pipeline.
+    settings: Settings = update_settings()
+    auto: bool = settings.auto_mode
     if auto:
         console.print(
-            'TRYB AUTOMATYCZNY — pipeline bez pytań.\n', style='green_bold')
-    settings: Settings = update_settings(auto=auto)
+            'TRYB AUTOMATYCZNY — pozostałe kroki bez pytań.\n', style='green_bold')
     already_polish: Set[str] = extract_tracks_from_mkv(auto=auto)
     refactor_subtitles(auto=auto)
     translate_subtitles(settings, auto=auto, already_polish=already_polish)

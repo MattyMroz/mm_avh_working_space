@@ -179,8 +179,13 @@ class SubtitleTranslator:
         for group in groups:
             text: str = " @@\n".join(sub.text.replace("\n", " ◍◍◍◍ ")
                                      for sub in group)
-            translated_text: str = translator.translate_text(
-                text, target_lang='PL').text
+            translation_result = translator.translate_text(
+                text, target_lang='PL')
+            if isinstance(translation_result, list):
+                translated_text: str = "".join(
+                    result.text for result in translation_result)
+            else:
+                translated_text = translation_result.text
             translated_texts: List[str] = translated_text.split(" @@\n")
             if len(translated_texts) == len(group):
                 for i in range(len(group)):
@@ -253,7 +258,7 @@ class SubtitleTranslator:
                              "\nTranslated with www.DeepL.com/Translator (free version)"]
 
         with open(path.join(dir_path, filename), 'r', encoding='utf-8') as in_file:
-            text: str = in_file.read()
+            text = in_file.read()
 
         for freze in frezes:
             text = text.replace(freze, "")
@@ -270,22 +275,24 @@ class SubtitleTranslator:
                 - dir_path (str): The directory path of the subtitle file.
                 - settings (Settings): The settings for the translation.
         """
-        translator: str = settings.translator
-        translated_line_count: int = int(settings.translated_line_count)
-        deepl_api_key: str = settings.deepl_api_key
+        translator: str = settings.translator or ""
+        translated_line_count: int = int(settings.translated_line_count or "0")
+        deepl_api_key: str = settings.deepl_api_key or ""
 
         console.print(
             f"[green_italic]Tłumaczenie napisów za pomocą {translator}...")
         console.print(path.join(dir_path, filename), '\n', style='white_bold')
 
+        def _translate_google(fname: str, directory: str, line_count: int) -> None:
+            SubtitleTranslator.translate_google(fname, directory, line_count)
+
+        def _translate_deepl_api(fname: str, directory: str, line_count: int) -> None:
+            SubtitleTranslator.translate_deepl_api(
+                fname, directory, line_count, deepl_api_key)
+
         translator_functions = {
-            'Google Translate': lambda *args:
-                SubtitleTranslator.translate_google(*args[:3]),
-            'DeepL API': lambda *args:
-                SubtitleTranslator.translate_deepl_api(
-                    *args[:3], deepl_api_key),
-            'DeepL Desktop Free': lambda *args:
-                SubtitleTranslator.translate_deepl_desktop(*args[:3]),
+            'Google Translate': _translate_google,
+            'DeepL API': _translate_deepl_api,
         }
 
         if translator in translator_functions:

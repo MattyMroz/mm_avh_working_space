@@ -51,7 +51,11 @@ log = logging.getLogger("elevenbytes")
 # ─── Config ────────────────────────────────────────────────────────────────────
 
 API_KEY: str = "wqpwgoGhADAwIdb1JRNTAEBgg="
-API_URL: str = "https://teamsp.org/xi/run6.php"
+API_URL_V6: str = "https://teamsp.org/xi/run6.php"  # silnik v6 — ElevenLabs v2 (bez voice_settings)
+API_URL_V7: str = "https://teamsp.org/xi/run7.php"  # silnik v7 — ElevenLabs v3 (+voice_settings)
+API_URL: str = API_URL_V6  # domyślny endpoint (wsteczna kompatybilność)
+ENGINE_URLS: dict[str, str] = {"v6": API_URL_V6, "v7": API_URL_V7}
+DEFAULT_ENGINE: str = "v6"
 MAX_CHARS: int = 5000
 MIN_CHARS: int = 2
 MIN_AUDIO_BYTES: int = 1024
@@ -60,7 +64,7 @@ DEFAULT_CONCURRENCY: int = 100
 DEFAULT_TIMEOUT: float = 30.0
 DEFAULT_MAX_RETRIES: int = 100
 RETRY_BACKOFF_BASE: float = 2.0
-RETRY_STATUS_CODES: frozenset[int] = frozenset({403, 429, 502, 503, 504})
+RETRY_STATUS_CODES: frozenset[int] = frozenset({403, 429, 500, 502, 503, 504})
 SUPPORTED_FORMATS: frozenset[str] = frozenset({"mp3", "wav", "ogg", "flac"})
 
 # ─── Głosy ElevenLabs ─────────────────────────────────────────────────────────
@@ -71,6 +75,37 @@ VOICES: dict[str, tuple[str, str]] = {
     "sabine": ("Sabine — Fun and Dynamic Narrator", "BBz8H3kffyIUs3SYExlh"),
     "tim": ("Tim — Clear, English and Neutral", "FxZjRiAEBESrb7srpme7")
 }
+
+
+# ─── Voice settings (silnik v7 / ElevenLabs v3) ──────────────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class VoiceSettings:
+    """Parametry voice_settings ElevenLabs — wysyłane tylko przez silnik v7 (run7).
+
+    Domyślne wartości bezpieczne dla modelu v3. Zakresy suwaków 0.0–1.0.
+
+    Args:
+        stability: Stabilność głosu (v3: 0.0 Creative, 0.5 Natural, 1.0 Robust).
+        similarity_boost: Wierność wobec oryginalnego głosu.
+        style: Wyolbrzymienie stylu (ElevenLabs zaleca 0.0).
+        use_speaker_boost: Wzmocnienie podobieństwa do mówcy.
+    """
+
+    stability: float = 0.5
+    similarity_boost: float = 0.75
+    style: float = 0.0
+    use_speaker_boost: bool = True
+
+    def as_form(self) -> dict[str, str]:
+        """Zwróć pola do form-data (bool jako 'true'/'false', jak frontend run7)."""
+        return {
+            "stability": str(self.stability),
+            "similarity_boost": str(self.similarity_boost),
+            "style": str(self.style),
+            "use_speaker_boost": "true" if self.use_speaker_boost else "false",
+        }
 
 
 # ─── Result types ──────────────────────────────────────────────────────────────
@@ -139,6 +174,9 @@ class TTS:
     Args:
         default_voice: Domyślny głos (alias lub raw voice ID).
         output_dir: Domyślny folder na pliki audio. None = CWD.
+        engine: Silnik proxy: "v6" (default, ElevenLabs v2, bez voice_settings) lub
+            "v7" (ElevenLabs v3 — wysyła voice_settings).
+        settings: Domyślne voice_settings dla silnika v7. None = wartości domyślne.
         concurrency: Max równoległych requestów (default 20).
         max_retries: Max retryów na 403/429/5xx z exponential backoff.
         timeout: Timeout HTTP w sekundach.
@@ -148,10 +186,14 @@ class TTS:
         self,
         default_voice: str = DEFAULT_VOICE,
         output_dir: str | Path | None = None,
+        engine: str = DEFAULT_ENGINE,
+        settings: VoiceSettings | None = None,
         concurrency: int = DEFAULT_CONCURRENCY,
         max_retries: int = DEFAULT_MAX_RETRIES,
         timeout: float = DEFAULT_TIMEOUT,
     ) -> None:
+        self._api_url = self._resolve_engine(engine)
+        self._settings = settings or VoiceSettings()
         self._default_voice = default_voice
         self._output_dir = Path(output_dir) if output_dir else None
         self._max_retries = max_retries
@@ -183,6 +225,27 @@ class TTS:
             self._sem = asyncio.Semaphore(self._concurrency)
         return self._sem
 
+    @staticmethod
+    def _resolve_engine(engine: str) -> str:
+        """Mapuj nazwę silnika ("v6"/"v7") na URL endpointu."""
+        if engine not in ENGINE_URLS:
+            raise TTSValidationError(
+                f"Nieznany engine '{engine}'. Dozwolone: {', '.join(sorted(ENGINE_URLS))}"
+            )
+        return ENGINE_URLS[engine]
+
+    def _build_payload(
+        self, text: str, voice_id: str, settings: VoiceSettings | None
+    ) -> dict[str, str]:
+        """Zbuduj form-data. voice_settings dołączane tylko dla silnika v7 (run7).
+
+        Silnik v6 (run6) ignoruje te pola, więc nie zaśmiecamy nimi requestu.
+        """
+        payload = {"text": text, "voice": voice_id, "key": API_KEY}
+        if self._api_url == API_URL_V7:
+            payload.update((settings or self._settings).as_form())
+        return payload
+
     # ── Async API ──────────────────────────────────────────────────────────
 
     async def synthesize(
@@ -190,6 +253,7 @@ class TTS:
         text: str,
         voice: str | None = None,
         fmt: str = "mp3",
+        settings: VoiceSettings | None = None,
     ) -> bytes:
         """Syntezuj tekst → audio bytes.
 
@@ -200,6 +264,7 @@ class TTS:
             text: Tekst do syntezy (2–5000 znaków).
             voice: Alias głosu lub raw voice ID. None = default.
             fmt: Format wyjściowy: mp3 (default), wav, ogg, flac.
+            settings: Nadpisanie voice_settings dla tego wywołania (tylko silnik v7).
 
         Returns:
             Surowe bajty audio w wybranym formacie.
@@ -213,7 +278,7 @@ class TTS:
         voice_id = self._resolve_voice(voice or self._default_voice)
 
         async with self._get_sem():
-            mp3_data = await self._request_with_retry(text, voice_id)
+            mp3_data = await self._request_with_retry(text, voice_id, settings)
 
         if fmt == "mp3":
             return mp3_data
@@ -295,9 +360,10 @@ class TTS:
 
     # ── Sync wrappers ──────────────────────────────────────────────────────
 
-    def synthesize_sync(self, text: str, voice: str | None = None, fmt: str = "mp3") -> bytes:
+    def synthesize_sync(self, text: str, voice: str | None = None, fmt: str = "mp3",
+                        settings: VoiceSettings | None = None) -> bytes:
         """Synchroniczna wersja synthesize()."""
-        return self._run_sync(self.synthesize(text, voice, fmt=fmt))  # type: ignore[return-value]
+        return self._run_sync(self.synthesize(text, voice, fmt=fmt, settings=settings))  # type: ignore[return-value]
 
     def synthesize_to_file_sync(
         self,
@@ -386,17 +452,17 @@ class TTS:
         if len(text) > MAX_CHARS:
             raise TTSValidationError(f"Tekst za długi ({len(text)} zn., max {MAX_CHARS})")
 
-    async def _request_with_retry(self, text: str, voice_id: str) -> bytes:
+    async def _request_with_retry(
+        self, text: str, voice_id: str, settings: VoiceSettings | None = None
+    ) -> bytes:
         """POST z retry + exponential backoff na retryable status codes."""
         last_status = 0
         last_err = ""
+        payload = self._build_payload(text, voice_id, settings)
 
         for attempt in range(1, self._max_retries + 1):
             try:
-                resp = await self._client.post(
-                    API_URL,
-                    data={"text": text, "voice": voice_id, "key": API_KEY},
-                )
+                resp = await self._client.post(self._api_url, data=payload)
                 last_status = resp.status_code
 
                 if resp.status_code in RETRY_STATUS_CODES:
@@ -442,6 +508,7 @@ class TTS:
         voice: str | None,
         out_dir: Path | None,
         fmt: str = "mp3",
+        settings: VoiceSettings | None = None,
     ) -> SynthResult:
         """Pojedynczy element batcha — łapie błędy, nie crashuje całości."""
         t0 = time.perf_counter()
@@ -450,7 +517,7 @@ class TTS:
             voice_id = self._resolve_voice(voice or self._default_voice)
 
             async with self._get_sem():
-                mp3_data = await self._request_with_retry(text, voice_id)
+                mp3_data = await self._request_with_retry(text, voice_id, settings)
 
             audio = mp3_data if fmt == "mp3" else self._convert_audio(mp3_data, fmt)
 

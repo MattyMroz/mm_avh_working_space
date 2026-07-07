@@ -67,14 +67,6 @@ ESPEAK_NG_FOLDER: str = path.join(
     'mm_avh_working_space', 'bin', 'espeak-ng'
 )
 
-# Paths for STylish-TTS-Pl
-STYLISH_TTS_FOLDER: str = path.join(
-    path.abspath(path.join(getcwd(), pardir)),
-    'mm_avh_working_space', 'bin', 'stylish_tts'
-)
-STYLISH_TTS_CONFIG_PATH: str = path.join(STYLISH_TTS_FOLDER, 'model.yml')
-STYLISH_TTS_CHECKPOINT_DIR: str = path.join(STYLISH_TTS_FOLDER, 'checkpoint_final', 'checkpoint_final')
-
 # Add FFmpeg directory to PATH so pydub can find it
 # This MUST be done before importing pydub
 if FFMPEG_FOLDER not in environ.get('PATH', ''):
