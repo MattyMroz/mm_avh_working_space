@@ -980,13 +980,39 @@ class SubtitleToSpeech:
         """
             Gets the duration of the file at the given path.
 
+            ffprobe (via mediainfo) sometimes returns 'N/A' for the duration —
+            e.g. for RF64/>4GB WAVs, empty or truncated files. In that case we
+            fall back to reading the WAV header directly, and finally to 0.0 so
+            the whole audio pipeline never crashes on a single unreadable file.
+
             Args:
                 - file_path (str): The path to the file.
 
             Returns:
-                - float: The duration of the file in seconds.
+                - float: The duration of the file in seconds (0.0 if unknown).
         """
-        return float(mediainfo(file_path)['duration'])
+        try:
+            raw_duration = mediainfo(file_path).get('duration', 'N/A')
+            return float(raw_duration)
+        except (ValueError, TypeError, KeyError):
+            pass
+
+        # Fallback dla WAV: policz długość z nagłówka (nframes / framerate).
+        if file_path.lower().endswith('.wav'):
+            try:
+                with wave.open(file_path, 'rb') as wav_file:
+                    frames = wav_file.getnframes()
+                    rate = wav_file.getframerate()
+                    if rate > 0:
+                        return frames / float(rate)
+            except (wave.Error, OSError, EOFError):
+                pass
+
+        console.print(
+            f'Nie udało się odczytać długości pliku (używam 0.0): {file_path}',
+            style='yellow_bold',
+        )
+        return 0.0
 
     def _merge_files(self, input_file_1: str, input_file_2: str, output_file: str):
         """
