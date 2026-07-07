@@ -121,9 +121,8 @@ def extract_tracks_from_mkv(auto: bool = False) -> Set[str]:  # ✅
     print_lock: Lock = Lock()
 
     def _extract_one(filename: str) -> None:
-        # In auto mode each thread buffers its output and flushes it as one block,
-        # so parallel files don't interleave into unreadable output. Manual mode
-        # prints straight through — it has input() prompts that must stay visible.
+        # Auto buffers per-thread (clean parallel log); manual prints straight
+        # through because it has input() prompts.
         if auto:
             buffer: StringIO = StringIO()
             thread_console: Console = Console(

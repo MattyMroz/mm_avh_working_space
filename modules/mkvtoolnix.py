@@ -69,8 +69,6 @@ class MkvToolNix:
     mkv_info_path: str = MKV_INFO_PATH
     mkv_propedit_path: str = MKV_PROPEDIT_PATH
     subtitle_already_target_lang: bool = False
-    # Per-instance console so a caller can redirect output (e.g. to a per-thread
-    # buffer for clean parallel logging). Defaults to the global console.
     console: Console = field(default=console)
 
     def _check_executables(self) -> None:
