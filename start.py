@@ -1,8 +1,12 @@
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import contextmanager
 from msvcrt import getch
-from os import listdir, makedirs, path
+from os import cpu_count, listdir, makedirs, path
 from shutil import rmtree
-from typing import Dict, List, Set
+from threading import Lock
+from time import perf_counter
+from typing import Dict, Iterator, List, Set
 
 from natsort import natsorted
 
@@ -101,16 +105,37 @@ def extract_tracks_from_mkv(auto: bool = False) -> Set[str]:  # ✅
                 translation in auto mode).
     """
     already_polish: Set[str] = set()
-    if auto or ask_user('🧲 Czy chcesz wyciągnąć ścieżki z plików mkv? (T lub Y - tak):'):
-        files: List[str] = get_mkv_files(WORKING_SPACE)
-        sorted_files: List[str] = natsorted(files)
-        for filename in sorted_files:
-            mkv: MkvToolNix = MkvToolNix(filename)
-            mkv.mkv_extract_track(mkv.get_mkv_info(), auto_mode=auto)
-            if mkv.subtitle_already_target_lang:
-                already_polish.add(filename[:-4])
-    else:
+    if not (auto or ask_user('🧲 Czy chcesz wyciągnąć ścieżki z plików mkv? (T lub Y - tak):')):
         console.print('Pomijam tę opcję.\n', style='red_bold')
+        return already_polish
+
+    files: List[str] = get_mkv_files(WORKING_SPACE)
+    sorted_files: List[str] = natsorted(files)
+    if not sorted_files:
+        return already_polish
+
+    # Extraction is I/O-bound (mkvextract subprocess + disk), so threads scale it
+    # well on an SSD. A per-file failure must not abort the rest of the batch.
+    polish_lock: Lock = Lock()
+
+    def _extract_one(filename: str) -> None:
+        mkv: MkvToolNix = MkvToolNix(filename)
+        mkv.mkv_extract_track(mkv.get_mkv_info(), auto_mode=auto)
+        if mkv.subtitle_already_target_lang:
+            with polish_lock:
+                already_polish.add(filename[:-4])
+
+    workers: int = _parallelism(len(sorted_files), cap=6)
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        future_map = {pool.submit(_extract_one, name): name for name in sorted_files}
+        for future in as_completed(future_map):
+            name = future_map[future]
+            try:
+                future.result()
+            except Exception as exc:
+                console.print(
+                    f'Błąd wypakowywania {name}: {exc}', style='red_bold')
+
     return already_polish
 
 
@@ -423,6 +448,41 @@ def clear_temp_folders():
         makedirs(folder, exist_ok=True)
 
 
+@contextmanager
+def _timed_stage(name: str) -> Iterator[None]:
+    """Measure and log how long a pipeline stage takes.
+
+    Per-stage timing tells us where the wall-clock actually goes, so we optimize
+    the real bottleneck instead of guessing.
+
+    Args:
+        name: Human-readable stage label shown in the log line.
+    """
+    start: float = perf_counter()
+    try:
+        yield
+    finally:
+        elapsed: float = perf_counter() - start
+        console.print(f'⏱  {name}: {elapsed:.1f}s', style='blue_bold')
+
+
+def _parallelism(item_count: int, cap: int) -> int:
+    """Pick a worker count that scales with the machine but never overshoots.
+
+    Never spawns more workers than there are items or CPU cores, and clamps to a
+    per-stage cap (I/O stages want a lower cap than the core count). Always ≥1.
+
+    Args:
+        item_count: How many items the stage will process.
+        cap: Upper bound appropriate for this stage's workload (I/O vs CPU).
+
+    Returns:
+        Worker count in the range [1, min(item_count, cpu_count, cap)].
+    """
+    cores: int = cpu_count() or 1
+    return max(1, min(item_count, cores, cap))
+
+
 @execution_timer  # ✅
 def main():
     """
@@ -442,16 +502,23 @@ def main():
     if auto:
         console.print(
             'TRYB AUTOMATYCZNY — pozostałe kroki bez pytań.\n', style='green_bold')
-    already_polish: Set[str] = extract_tracks_from_mkv(auto=auto)
-    refactor_subtitles(auto=auto)
-    translate_subtitles(settings, auto=auto, already_polish=already_polish)
+    with _timed_stage('Wypakowywanie MKV'):
+        already_polish: Set[str] = extract_tracks_from_mkv(auto=auto)
+    with _timed_stage('Refactor napisów'):
+        refactor_subtitles(auto=auto)
+    with _timed_stage('Tłumaczenie'):
+        translate_subtitles(settings, auto=auto, already_polish=already_polish)
     # Number-to-words conversion is skipped in auto mode by user preference.
     if not auto:
         convert_numbers_to_words()
-    generate_audio_for_subtitles(settings, auto=auto)
-    refactor_alt_subtitles()
-    process_output_files(settings)
-    clear_temp_folders()
+    with _timed_stage('Generowanie audio'):
+        generate_audio_for_subtitles(settings, auto=auto)
+    with _timed_stage('Refactor alt napisów'):
+        refactor_alt_subtitles()
+    with _timed_stage('Przetwarzanie wyjścia'):
+        process_output_files(settings)
+    with _timed_stage('Czyszczenie temp'):
+        clear_temp_folders()
 
 
 if __name__ == '__main__':
