@@ -1,12 +1,10 @@
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from contextlib import contextmanager
 from msvcrt import getch
 from os import cpu_count, listdir, makedirs, path
 from shutil import rmtree
 from threading import Lock
-from time import perf_counter
-from typing import Dict, Iterator, List, Set
+from typing import Dict, List, Set
 
 from natsort import natsorted
 
@@ -448,24 +446,6 @@ def clear_temp_folders():
         makedirs(folder, exist_ok=True)
 
 
-@contextmanager
-def _timed_stage(name: str) -> Iterator[None]:
-    """Measure and log how long a pipeline stage takes.
-
-    Per-stage timing tells us where the wall-clock actually goes, so we optimize
-    the real bottleneck instead of guessing.
-
-    Args:
-        name: Human-readable stage label shown in the log line.
-    """
-    start: float = perf_counter()
-    try:
-        yield
-    finally:
-        elapsed: float = perf_counter() - start
-        console.print(f'⏱  {name}: {elapsed:.1f}s', style='blue_bold')
-
-
 def _parallelism(item_count: int, cap: int) -> int:
     """Pick a worker count that scales with the machine but never overshoots.
 
@@ -502,23 +482,16 @@ def main():
     if auto:
         console.print(
             'TRYB AUTOMATYCZNY — pozostałe kroki bez pytań.\n', style='green_bold')
-    with _timed_stage('Wypakowywanie MKV'):
-        already_polish: Set[str] = extract_tracks_from_mkv(auto=auto)
-    with _timed_stage('Refactor napisów'):
-        refactor_subtitles(auto=auto)
-    with _timed_stage('Tłumaczenie'):
-        translate_subtitles(settings, auto=auto, already_polish=already_polish)
+    already_polish: Set[str] = extract_tracks_from_mkv(auto=auto)
+    refactor_subtitles(auto=auto)
+    translate_subtitles(settings, auto=auto, already_polish=already_polish)
     # Number-to-words conversion is skipped in auto mode by user preference.
     if not auto:
         convert_numbers_to_words()
-    with _timed_stage('Generowanie audio'):
-        generate_audio_for_subtitles(settings, auto=auto)
-    with _timed_stage('Refactor alt napisów'):
-        refactor_alt_subtitles()
-    with _timed_stage('Przetwarzanie wyjścia'):
-        process_output_files(settings)
-    with _timed_stage('Czyszczenie temp'):
-        clear_temp_folders()
+    generate_audio_for_subtitles(settings, auto=auto)
+    refactor_alt_subtitles()
+    process_output_files(settings)
+    clear_temp_folders()
 
 
 if __name__ == '__main__':
