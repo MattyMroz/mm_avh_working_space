@@ -440,10 +440,16 @@ class Settings:
         return settings.elevenbytes_voice if settings else None
 
     @staticmethod
-    def _prompt_float_0_1(label: str, default: str) -> str:
-        """Ask for a 0.0–1.0 value; Enter keeps default, bad input warns and keeps default."""
-        console.print(
-            f'  {label} (0.0–1.0) [{default}]: ', style='green_bold', end='')
+    def _prompt_float_0_1(description: str, verb: str, default: str) -> str:
+        """Ask for a 0.0–1.0 value in the project's prompt style.
+
+        Args:
+            description: Full Polish label with range, e.g. 'Stabilność głosu'.
+            verb: Short noun for the 'Wpisz ...:' line, e.g. 'stabilność'.
+            default: Current/default value shown to the user; kept on empty input.
+        """
+        console.print(f'\n{description} (0.0-1.0), obecna: {default}')
+        console.print(f'Wpisz {verb}: ', style='green_bold', end='')
         choice = input().strip()
         if not choice:
             return default
@@ -453,7 +459,7 @@ class Settings:
                 return choice
         except ValueError:
             pass
-        console.print('  Niepoprawna wartość. Używam domyślnej.', style='red_bold')
+        console.print('Niepoprawna wartość. Używam domyślnej wartości.', style='red_bold')
         return default
 
     @staticmethod
@@ -471,13 +477,14 @@ class Settings:
         default_style = (prev.elevenbytes_style if prev and prev.elevenbytes_style else '0.0')
         default_boost = (prev.elevenbytes_speaker_boost if prev and prev.elevenbytes_speaker_boost else 'true')
 
-        console.print('\n[yellow_bold]Ustawienia głosu ElevenLabs v3 (Enter = domyślne):')
-        stability = Settings._prompt_float_0_1('stability', default_stability)
-        similarity_boost = Settings._prompt_float_0_1('similarity_boost', default_similarity)
-        style = Settings._prompt_float_0_1('style', default_style)
+        console.print('\n[yellow_bold]Ustawienia głosu ElevenLabs v3 (Enter = bez zmiany):')
+        stability = Settings._prompt_float_0_1('Stabilność głosu', 'stabilność', default_stability)
+        similarity_boost = Settings._prompt_float_0_1('Podobieństwo do głosu', 'podobieństwo', default_similarity)
+        style = Settings._prompt_float_0_1('Ekspresja stylu', 'ekspresję', default_style)
 
-        console.print(
-            f'  use_speaker_boost (t/n) [{default_boost}]: ', style='green_bold', end='')
+        boost_label = 'tak' if default_boost == 'true' else 'nie'
+        console.print(f'\nWzmocnienie mówcy — wierność brzmienia (T/N), obecne: {boost_label}')
+        console.print('Włączyć wzmocnienie mówcy? (T/N): ', style='green_bold', end='')
         boost_choice = input().strip().lower()
         if boost_choice in ('t', 'y', 'true'):
             speaker_boost = 'true'
@@ -492,13 +499,12 @@ class Settings:
     def _get_auto_mode(settings: Optional['Settings']) -> bool:
         """Prompt user to toggle unattended auto mode (T/N). Enter keeps current value."""
         current = settings.auto_mode if settings else False
-        current_label = 'włączony' if current else 'wyłączony'
+        current_label = 'tak' if current else 'nie'
         console.print(
-            f'\n[yellow_bold]Tryb automatyczny (obecnie: {current_label}) — '
-            f'pipeline bez pytań poza tym menu.')
-        console.print(
-            'Włączyć tryb automatyczny? (T/Y - tak, N - nie, Enter - bez zmian): ',
-            style='green_bold', end='')
+            f'\nTryb automatyczny — pipeline bez pytań poza tym menu (T/N), '
+            f'obecnie: {current_label}')
+        console.print('Włączyć tryb automatyczny? (T/N): ',
+                      style='green_bold', end='')
         choice = input().strip().lower()
         if choice in ('t', 'y'):
             return True
