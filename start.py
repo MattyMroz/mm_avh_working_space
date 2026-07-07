@@ -3,8 +3,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from io import StringIO
 from msvcrt import getch
 from os import cpu_count, listdir, makedirs, path
+from queue import Queue
 from shutil import rmtree
-from threading import Lock
+from threading import Lock, Thread
 from typing import Dict, List, Optional, Set, Tuple
 
 from natsort import natsorted
@@ -309,6 +310,121 @@ def output_one_episode(stem: str, settings: Settings) -> None:
                                                       crf_value='18',
                                                       preset_value='medium')
     subtitle_processor.process_mkv(settings)
+
+
+# Sentinel put on a pipeline queue to signal "no more items" to its consumer.
+_PIPELINE_DONE: object = object()
+
+
+def _log_episode(stem: str, message: str, style: str = 'blue_bold') -> None:
+    """Print a pipeline message tagged with the episode, atomically.
+
+    Parallel pipeline stages share one console; the lock keeps a tagged line
+    from landing in the middle of another stage's output.
+
+    Args:
+        stem: Episode identifier shown as a prefix.
+        message: Text to print.
+        style: Rich style name.
+    """
+    with _EPISODE_PRINT_LOCK:
+        console.print(f'[{stem}] {message}', style=style)
+
+
+def run_auto_pipeline(settings: Settings) -> None:
+    """Process every episode as a 3-stage pipeline so stages overlap in time.
+
+    Stages run concurrently as separate threads connected by queues, so while
+    episode N is being voiced, episode N+1 is already being translated (they use
+    different APIs, so they do not fight over the same rate limit):
+
+        PREP thread  : extract -> refactor -> translate main -> (queue AUDIO)
+                       -> translate alt      (per episode, sequential)
+        AUDIO thread : take stem -> generate+merge audio -> (queue OUTPUT)
+        OUTPUT thread: take stem -> build final mkv/mp4
+
+    Each episode lives in its own temp/<stem>/ folder (see episode_temp_dirs), so
+    concurrent stages never touch another episode's files — this is what makes
+    the overlap safe (no cross-episode file races). A failure in one episode is
+    isolated: it is logged and the episode is dropped, the pipeline keeps running.
+
+    At most 3 episodes are in flight (one per stage), which keeps the audio API
+    load bounded (audio itself already fans out ~85 requests per episode).
+
+    Args:
+        settings: Pipeline settings (translator, tts, output target).
+    """
+    mkv_files: List[str] = natsorted(get_mkv_files(WORKING_SPACE))
+    if not mkv_files:
+        console.print('Brak plików MKV do przetworzenia.', style='red_bold')
+        return
+
+    audio_queue: "Queue[object]" = Queue()
+    output_queue: "Queue[object]" = Queue()
+
+    def _prep_stage() -> None:
+        """Extract, refactor and translate each episode; feed the audio queue."""
+        try:
+            for mkv_filename in mkv_files:
+                stem: str = mkv_filename[:-4] if mkv_filename.endswith('.mkv') else mkv_filename
+                dirs: Dict[str, str] = episode_temp_dirs(stem)
+                try:
+                    _log_episode(stem, 'Wypakowywanie...', style='yellow_bold')
+                    resolved_stem, already_polish = extract_one_episode(mkv_filename, dirs)
+                    refactor_one_episode(resolved_stem, dirs)
+                    if not already_polish:
+                        _log_episode(resolved_stem, 'Tłumaczenie...', style='yellow_bold')
+                        translate_one_main(resolved_stem, dirs, settings)
+                    # Main is ready -> audio can start now, in parallel with the
+                    # next episode's translation.
+                    audio_queue.put(resolved_stem)
+                    # Alt subtitles come after main and do not block audio.
+                    if not already_polish:
+                        translate_one_alt(resolved_stem, dirs, settings)
+                except Exception as exc:
+                    _log_episode(stem, f'Błąd (prep): {exc}', style='red_bold')
+        finally:
+            audio_queue.put(_PIPELINE_DONE)
+
+    def _audio_stage() -> None:
+        """Consume ready episodes, voice them, feed the output queue."""
+        try:
+            while True:
+                item: object = audio_queue.get()
+                if item is _PIPELINE_DONE:
+                    break
+                stem = str(item)
+                dirs = episode_temp_dirs(stem)
+                try:
+                    _log_episode(stem, 'Generowanie audio...', style='yellow_bold')
+                    audio_one_episode(stem, dirs, settings)
+                    output_queue.put(stem)
+                except Exception as exc:
+                    _log_episode(stem, f'Błąd (audio): {exc}', style='red_bold')
+        finally:
+            output_queue.put(_PIPELINE_DONE)
+
+    def _output_stage() -> None:
+        """Consume voiced episodes and build the final output file."""
+        while True:
+            item = output_queue.get()
+            if item is _PIPELINE_DONE:
+                break
+            stem = str(item)
+            try:
+                _log_episode(stem, 'Przetwarzanie wyjścia...', style='yellow_bold')
+                output_one_episode(stem, settings)
+                _log_episode(stem, 'Gotowe.', style='green_bold')
+            except Exception as exc:
+                _log_episode(stem, f'Błąd (wyjście): {exc}', style='red_bold')
+
+    prep: Thread = Thread(target=_prep_stage, name='prep')
+    audio: Thread = Thread(target=_audio_stage, name='audio')
+    output: Thread = Thread(target=_output_stage, name='output')
+    for thread in (prep, audio, output):
+        thread.start()
+    for thread in (prep, audio, output):
+        thread.join()
 
 
 def extract_tracks_from_mkv(auto: bool = False) -> Set[str]:  # ✅
@@ -742,14 +858,21 @@ def main():
     settings: Settings = update_settings()
     auto: bool = settings.auto_mode
     if auto:
+        # Auto mode runs the overlapping per-episode pipeline (extract -> refactor
+        # -> translate -> audio -> output) instead of the sequential batch stages,
+        # so episodes' stages overlap in time. Each episode is isolated in its own
+        # temp/<stem>/ folder, so nothing races on shared files.
         console.print(
-            'TRYB AUTOMATYCZNY — pozostałe kroki bez pytań.\n', style='green_bold')
+            'TRYB AUTOMATYCZNY — potok równoległy (odcinki nakładane).\n',
+            style='green_bold')
+        run_auto_pipeline(settings)
+        clear_temp_folders()
+        return
+
     already_polish: Set[str] = extract_tracks_from_mkv(auto=auto)
     refactor_subtitles(auto=auto)
     translate_subtitles(settings, auto=auto, already_polish=already_polish)
-    # Number-to-words conversion is skipped in auto mode by user preference.
-    if not auto:
-        convert_numbers_to_words()
+    convert_numbers_to_words()
     generate_audio_for_subtitles(settings, auto=auto)
     refactor_alt_subtitles()
     process_output_files(settings)
