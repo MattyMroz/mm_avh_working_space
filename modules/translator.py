@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from os import environ, path
 from subprocess import call
 from time import sleep
-from typing import List
+from typing import Dict, List
 
 import deepl
 import pyautogui
@@ -68,6 +68,26 @@ class SubtitleTranslator:
     working_space_temp_alt_subs: str = WORKING_SPACE_TEMP_ALT_SUBS
 
     @staticmethod
+    def _clean_subtitle_text(text: str) -> str:
+        """Strip leftover markup before translation, keeping line breaks intact.
+
+        Removes ASS override tags ({...}) and any stray HTML tags that survived
+        the ASS->SRT conversion, and turns the ASS hard space (\\h) into a normal
+        space. Real newlines are preserved — the translators encode them with
+        their own markers, so they must reach this point untouched.
+
+        Args:
+            text: Raw subtitle line text.
+
+        Returns:
+            The text with markup removed and newlines preserved.
+        """
+        text = re.sub(r'\{[^}]*\}', '', text)   # ASS override tags
+        text = re.sub(r'<[^>]*>', '', text)     # stray HTML tags
+        text = text.replace('\\h', ' ')          # ASS hard space
+        return text
+
+    @staticmethod
     def translate_google(filename: str, dir_path: str, translated_line_count: int, is_combined_with_gpt: bool = False) -> pysrt.SubRipFile:
         """
             Translates subtitles using Google Translate.
@@ -93,65 +113,61 @@ class SubtitleTranslator:
         
         subs: pysrt.SubRipFile = pysrt.open(path.join(dir_path, filename), encoding='utf-8')
 
-        SEPARATOR: str = "\u200B###\u200B"
-        NEWLINE_MARKER: str = "\u200B##\u200B"
+        ZWSP: str = "\u200B"  # zero-width space wrapping the markers
+        SEPARATOR: str = f"{ZWSP}###{ZWSP}"
+        NEWLINE_MARKER: str = f"{ZWSP}##{ZWSP}"
 
-        translated_subs: List[str] = []
-        subs_combined: List[str] = []
+        def _clean_translation(t: str) -> str:
+            """Undo the newline/separator markers and tidy whitespace."""
+            nl_plain = NEWLINE_MARKER.replace(ZWSP, "")
+            sep_plain = SEPARATOR.replace(ZWSP, "")
+            t = t.replace(ZWSP, "")
+            t = (t.replace(nl_plain + ", ", ",\n")
+                   .replace(nl_plain, "\n")
+                   .replace(NEWLINE_MARKER + ", ", ",\n")
+                   .replace(NEWLINE_MARKER, "\n")
+                   .replace(sep_plain, "\n")
+                   .replace("###", ""))
+            t = re.sub(r"[ \t]+\n", "\n", t)
+            t = re.sub(r"\n[ \t]+", "\n", t)
+            return t.strip()
 
-        for i, sub in enumerate(subs):
-            subs_combined.append(sub.text.replace("\n", NEWLINE_MARKER))
-
-            if (i + 1) % translated_line_count == 0 or i == len(subs) - 1:
-                combined_text: str = SEPARATOR.join(subs_combined)
+        def _translate_unique(unique_texts: List[str]) -> List[str]:
+            """Translate texts in batches of translated_line_count, 3-level fallback."""
+            results: List[str] = []
+            for start in range(0, len(unique_texts), translated_line_count):
+                batch: List[str] = unique_texts[start:start + translated_line_count]
+                combined_text: str = SEPARATOR.join(batch)
                 translated_text: str = translate_sync(combined_text, dest='pl')
-
                 translated_texts: List[str] = translated_text.split(SEPARATOR)
 
-                if len(translated_texts) != len(subs_combined):
-                    combined_text2: str = "\n".join(subs_combined)
+                if len(translated_texts) != len(batch):
+                    combined_text2: str = "\n".join(batch)
                     translated_text2: str = translate_sync(combined_text2, dest='pl')
                     translated_texts = translated_text2.split("\n")
 
-                if len(translated_texts) != len(subs_combined):
-                    translated_texts = []
-                    for single in subs_combined:
-                        t: str = translate_sync(single, dest='pl')
-                        translated_texts.append(t)
+                if len(translated_texts) != len(batch):
+                    translated_texts = [translate_sync(s, dest='pl') for s in batch]
 
-                if len(translated_texts) == len(subs_combined):
-                    for t in translated_texts:
-                        t = t.replace("\u200B", "")
-                        nl_plain = NEWLINE_MARKER.replace("\u200B", "")
-                        sep_plain = SEPARATOR.replace("\u200B", "")
-
-                        t = (t.replace(nl_plain + ", ", ",\n")
-                               .replace(nl_plain, "\n")
-                               .replace(NEWLINE_MARKER + ", ", ",\n")
-                               .replace(NEWLINE_MARKER, "\n")
-                               .replace(sep_plain, "\n")
-                               .replace("###", ""))
-
-                        t = re.sub(r"[ \t]+\n", "\n", t)
-                        t = re.sub(r"\n[ \t]+", "\n", t)
-                        t = t.strip()
-                        translated_subs.append(t)
+                if len(translated_texts) == len(batch):
+                    results.extend(_clean_translation(t) for t in translated_texts)
                 else:
-                    for _ in subs_combined:
-                        translated_subs.append("")
+                    results.extend("" for _ in batch)
+            return results
 
-                subs_combined = []
+        # Translate each UNIQUE cleaned phrase once (newlines encoded with the
+        # marker), then fill every line from the shared map — a phrase repeated
+        # 1000 times costs one translation, not a thousand.
+        marked_lines: List[str] = [
+            SubtitleTranslator._clean_subtitle_text(sub.text).replace("\n", NEWLINE_MARKER)
+            for sub in subs
+        ]
+        unique_marked: List[str] = list(dict.fromkeys(m for m in marked_lines if m.strip()))
+        translation_map: Dict[str, str] = dict(
+            zip(unique_marked, _translate_unique(unique_marked)))
 
-        # Assign translations back to subtitles (safeguard index errors)
-        if len(translated_subs) != len(subs):
-            console.print(f"Ostrzeżenie: liczba przetłumaczonych wierszy ({len(translated_subs)}) != oryginał ({len(subs)}). Przypisuję liniowo i uzupełniam brakujące.", style='yellow_bold')
-
-        for i, sub in enumerate(subs):
-            if i < len(translated_subs):
-                sub.text = translated_subs[i]
-            else:
-                # fallback: leave original text if missing
-                sub.text = sub.text
+        for sub, marked in zip(subs, marked_lines):
+            sub.text = "" if not marked.strip() else (translation_map.get(marked) or sub.text)
 
         if is_combined_with_gpt:
             translated_filename: str = filename.replace(
@@ -174,26 +190,48 @@ class SubtitleTranslator:
         subs: pysrt.SubRipFile = pysrt.open(
             path.join(dir_path, filename), encoding='utf-8')
         translator: deepl.Translator = deepl.Translator(deepl_api_key)
-        groups: List[List[pysrt.SubRipItem]] = [subs[i:i+translated_line_count]
-                                                for i in range(0, len(subs), translated_line_count)]
-        for group in groups:
-            text: str = " @@\n".join(sub.text.replace("\n", " ◍◍◍◍ ")
-                                     for sub in group)
-            translation_result = translator.translate_text(
-                text, target_lang='PL')
-            if isinstance(translation_result, list):
-                translated_text: str = "".join(
-                    result.text for result in translation_result)
-            else:
-                translated_text = translation_result.text
-            translated_texts: List[str] = translated_text.split(" @@\n")
-            if len(translated_texts) == len(group):
-                for i in range(len(group)):
-                    if i < len(translated_texts):
-                        group[i].text = translated_texts[i]
-                        group[i].text = group[i].text.replace(" ◍◍◍◍, ", ",\n")
-                        group[i].text = group[i].text.replace(" ◍◍◍◍ ", "\n")
-                        group[i].text = group[i].text.replace(" ◍◍◍◍", "")
+
+        NEWLINE_MARKER: str = " ◍◍◍◍ "
+        SEPARATOR: str = " @@\n"
+
+        def _clean_translation(t: str) -> str:
+            """Undo the newline markers used to protect line breaks in a batch."""
+            return (t.replace(" ◍◍◍◍, ", ",\n")
+                     .replace(" ◍◍◍◍ ", "\n")
+                     .replace(" ◍◍◍◍", ""))
+
+        def _translate_unique(unique_texts: List[str]) -> List[str]:
+            """Translate texts in batches of translated_line_count via DeepL."""
+            results: List[str] = []
+            for start in range(0, len(unique_texts), translated_line_count):
+                batch: List[str] = unique_texts[start:start + translated_line_count]
+                text: str = SEPARATOR.join(batch)
+                translation_result = translator.translate_text(text, target_lang='PL')
+                if isinstance(translation_result, list):
+                    translated_text: str = "".join(r.text for r in translation_result)
+                else:
+                    translated_text = translation_result.text
+                translated_texts: List[str] = translated_text.split(SEPARATOR)
+                if len(translated_texts) == len(batch):
+                    results.extend(_clean_translation(t) for t in translated_texts)
+                else:
+                    # Length mismatch — keep originals for this batch (no crash).
+                    results.extend(batch)
+            return results
+
+        # Translate each UNIQUE cleaned phrase once, then fill every line from the
+        # shared map — repeated phrases cost one translation, not one per line.
+        marked_lines: List[str] = [
+            SubtitleTranslator._clean_subtitle_text(sub.text).replace("\n", NEWLINE_MARKER)
+            for sub in subs
+        ]
+        unique_marked: List[str] = list(dict.fromkeys(m for m in marked_lines if m.strip()))
+        translation_map: Dict[str, str] = dict(
+            zip(unique_marked, _translate_unique(unique_marked)))
+
+        for sub, marked in zip(subs, marked_lines):
+            sub.text = "" if not marked.strip() else (translation_map.get(marked) or sub.text)
+
         subs.save(path.join(dir_path, filename), encoding='utf-8')
 
     @staticmethod
