@@ -25,6 +25,7 @@
 """
 
 from os import getcwd, pardir, path, environ
+from typing import Dict
 from rich.console import Console
 from rich.theme import Theme
 
@@ -37,6 +38,19 @@ WORKING_SPACE_OUTPUT: str = path.join(WORKING_SPACE, 'output')
 WORKING_SPACE_TEMP: str = path.join(WORKING_SPACE, 'temp')
 WORKING_SPACE_TEMP_MAIN_SUBS: str = path.join(WORKING_SPACE_TEMP, 'main_subs')
 WORKING_SPACE_TEMP_ALT_SUBS: str = path.join(WORKING_SPACE_TEMP, 'alt_subs')
+
+
+def episode_temp_dirs(stem: str) -> Dict[str, str]:
+    """Returns isolated temp directories for one episode."""
+    # Per-episode isolation lets auto mode run episodes in parallel without
+    # sharing temp files, subtitle folders, or TTS caches between workers.
+    base: str = path.abspath(path.join(WORKING_SPACE_TEMP, stem))
+    return {
+        'temp': base,
+        'main_subs': path.join(base, 'main_subs'),
+        'alt_subs': path.join(base, 'alt_subs'),
+    }
+
 
 # Paths for mkvtoolnix
 MKVTOOLNIX_FOLDER: str = path.join(

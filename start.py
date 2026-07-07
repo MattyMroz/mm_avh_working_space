@@ -5,7 +5,7 @@ from msvcrt import getch
 from os import cpu_count, listdir, makedirs, path
 from shutil import rmtree
 from threading import Lock
-from typing import Dict, List, Set
+from typing import Dict, List, Optional, Set, Tuple
 
 from natsort import natsorted
 from rich.console import Console
@@ -16,6 +16,7 @@ from constants import (WORKING_SPACE,
                        WORKING_SPACE_TEMP_MAIN_SUBS,
                        WORKING_SPACE_TEMP_ALT_SUBS,
                        CONSOLE_THEME,
+                       episode_temp_dirs,
                        console)
 
 from data.settings import Settings
@@ -28,6 +29,10 @@ from modules.mkv_processing import MKVProcessing
 
 from utils.cool_animation import CoolAnimation
 from utils.execution_timer import execution_timer
+
+
+# Shared flush lock for standalone per-episode extraction calls.
+_EPISODE_PRINT_LOCK: Lock = Lock()
 
 
 def check_and_create_directories(directories: List[str]):  # ✅
@@ -88,6 +93,222 @@ def update_settings() -> Settings:  # ✅
     else:
         console.print('Pomijam tę opcję.\n', style='red_bold')
     return Settings.load_from_file()
+
+
+def extract_one_episode(mkv_filename: str, dirs: Optional[Dict[str, str]] = None) -> Tuple[str, bool]:
+    """
+        Extracts tracks for one MKV into this episode's temp folder.
+
+        Args:
+            mkv_filename (str): MKV filename from the shared working_space folder.
+            dirs (Optional[Dict[str, str]]): Per-episode temp folders. When None,
+                they are derived from the MKV stem.
+
+        Returns:
+            Tuple[str, bool]: Episode stem and whether subtitles were already in
+                the target language.
+    """
+    if not mkv_filename.endswith('.mkv'):
+        return mkv_filename, False
+
+    stem: str = mkv_filename[:-4]
+    if dirs is None:
+        dirs = episode_temp_dirs(stem)
+
+    makedirs(dirs['temp'], exist_ok=True)
+    makedirs(dirs['main_subs'], exist_ok=True)
+    makedirs(dirs['alt_subs'], exist_ok=True)
+
+    buffer: StringIO = StringIO()
+    thread_console: Console = Console(
+        file=buffer, color_system="truecolor", theme=CONSOLE_THEME,
+        force_terminal=True, width=console.size.width)
+    mkv: MkvToolNix = MkvToolNix(
+        mkv_filename,
+        working_space_temp=dirs['temp'],
+        console=thread_console)
+
+    try:
+        mkv.mkv_extract_track(mkv.get_mkv_info(), auto_mode=True)
+    finally:
+        # Flush each pre-rendered per-episode log block atomically so parallel
+        # auto-mode workers do not interleave their console output.
+        with _EPISODE_PRINT_LOCK:
+            console.file.write(buffer.getvalue())
+            console.file.flush()
+
+    return stem, mkv.subtitle_already_target_lang
+
+
+def refactor_one_episode(stem: str, dirs: Optional[Dict[str, str]] = None) -> None:
+    """
+        Refactors one episode's extracted subtitle files inside isolated folders.
+
+        Args:
+            stem (str): MKV filename without the .mkv extension.
+            dirs (Optional[Dict[str, str]]): Per-episode temp folders.
+    """
+    if not stem:
+        return
+
+    if dirs is None:
+        dirs = episode_temp_dirs(stem)
+
+    makedirs(dirs['temp'], exist_ok=True)
+    makedirs(dirs['main_subs'], exist_ok=True)
+    makedirs(dirs['alt_subs'], exist_ok=True)
+
+    subtitle_extensions: List[str] = [
+        '.sup', '.txt', '.ogg',
+        '.ssa', '.ass', '.srt',
+        '.sub', '.usf', '.vtt',
+    ]
+    files: List[str] = get_files_with_extensions(dirs['temp'], subtitle_extensions)
+    if not files:
+        return
+
+    sorted_files: List[str] = natsorted(files)
+    for filename in sorted_files:
+        subtitle: SubtitleRefactor = SubtitleRefactor(
+            filename,
+            working_space_temp=dirs['temp'],
+            working_space_temp_main_subs=dirs['main_subs'],
+            working_space_temp_alt_subs=dirs['alt_subs'])
+        if filename.endswith('.ass') or filename.endswith('.ssa'):
+            subtitle.split_ass(auto_mode=True)
+            subtitle.ass_to_srt()
+        if filename.endswith('.srt'):
+            subtitle.move_srt()
+        if filename.endswith('.txt'):
+            subtitle.txt_to_srt(chunk_limit=250,
+                                sentence_length=750,
+                                split_method='word')
+
+
+def translate_one_main(stem: str, dirs: Optional[Dict[str, str]], settings: Settings) -> None:
+    """
+        Translates one episode's main subtitles in its isolated main_subs folder.
+
+        Args:
+            stem (str): MKV filename without the .mkv extension.
+            dirs (Optional[Dict[str, str]]): Per-episode temp folders.
+            settings (Settings): Translation settings.
+    """
+    if not stem:
+        return
+
+    if dirs is None:
+        dirs = episode_temp_dirs(stem)
+
+    makedirs(dirs['temp'], exist_ok=True)
+    makedirs(dirs['main_subs'], exist_ok=True)
+    makedirs(dirs['alt_subs'], exist_ok=True)
+
+    filename: str = stem + '.srt'
+    if not path.isfile(path.join(dirs['main_subs'], filename)):
+        return
+
+    translator_instance: SubtitleTranslator = SubtitleTranslator()
+    translator_instance.translate_srt(filename, dirs['main_subs'], settings)
+
+
+def translate_one_alt(stem: str, dirs: Optional[Dict[str, str]], settings: Settings) -> None:
+    """
+        Translates one episode's alternative subtitles when they exist.
+
+        Args:
+            stem (str): MKV filename without the .mkv extension.
+            dirs (Optional[Dict[str, str]]): Per-episode temp folders.
+            settings (Settings): Translation settings.
+    """
+    if not stem:
+        return
+
+    if dirs is None:
+        dirs = episode_temp_dirs(stem)
+
+    makedirs(dirs['temp'], exist_ok=True)
+    makedirs(dirs['main_subs'], exist_ok=True)
+    makedirs(dirs['alt_subs'], exist_ok=True)
+
+    filename: str = stem + '.srt'
+    if not path.isfile(path.join(dirs['alt_subs'], filename)):
+        return
+
+    translator_instance: SubtitleTranslator = SubtitleTranslator()
+    translator_instance.translate_srt(filename, dirs['alt_subs'], settings)
+
+
+def audio_one_episode(stem: str, dirs: Optional[Dict[str, str]], settings: Settings) -> None:
+    """
+        Generates and merges TTS audio for one episode in isolated temp folders.
+
+        Args:
+            stem (str): MKV filename without the .mkv extension.
+            dirs (Optional[Dict[str, str]]): Per-episode temp folders.
+            settings (Settings): TTS settings.
+    """
+    if not stem:
+        return
+
+    if dirs is None:
+        dirs = episode_temp_dirs(stem)
+
+    makedirs(dirs['temp'], exist_ok=True)
+    makedirs(dirs['main_subs'], exist_ok=True)
+    makedirs(dirs['alt_subs'], exist_ok=True)
+    makedirs(WORKING_SPACE_OUTPUT, exist_ok=True)
+
+    filename: str = stem + '.srt'
+    if not path.isfile(path.join(dirs['main_subs'], filename)):
+        return
+
+    subtitle_to_speech: SubtitleToSpeech = SubtitleToSpeech(
+        filename,
+        working_space_temp=dirs['temp'],
+        working_space_temp_main_subs=dirs['main_subs'],
+        working_space_temp_alt_subs=dirs['alt_subs'])
+    subtitle_to_speech.generate_audio(settings)
+
+
+def output_one_episode(stem: str, settings: Settings) -> None:
+    """
+        Processes one episode's generated output files into the selected target.
+
+        Args:
+            stem (str): MKV filename without the .mkv extension.
+            settings (Settings): Output processing settings.
+    """
+    if not stem:
+        return
+
+    dirs: Dict[str, str] = episode_temp_dirs(stem)
+    makedirs(dirs['temp'], exist_ok=True)
+    makedirs(dirs['main_subs'], exist_ok=True)
+    makedirs(dirs['alt_subs'], exist_ok=True)
+    makedirs(WORKING_SPACE_OUTPUT, exist_ok=True)
+
+    filename: str = stem + '.srt'
+    if path.isfile(path.join(dirs['alt_subs'], filename)):
+        subtitle: SubtitleRefactor = SubtitleRefactor(
+            filename,
+            working_space_temp=dirs['temp'],
+            working_space_temp_main_subs=dirs['main_subs'],
+            working_space_temp_alt_subs=dirs['alt_subs'])
+        subtitle.srt_to_ass()
+
+    files: List[str] = listdir(WORKING_SPACE_OUTPUT)
+    episode_files: List[str] = [
+        file for file in files
+        if path.splitext(file)[0] == stem and not file.endswith(('.mkv', '.mp4'))
+    ]
+    if not episode_files:
+        return
+
+    subtitle_processor: MKVProcessing = MKVProcessing(filename=stem,
+                                                      crf_value='18',
+                                                      preset_value='medium')
+    subtitle_processor.process_mkv(settings)
 
 
 def extract_tracks_from_mkv(auto: bool = False) -> Set[str]:  # ✅
