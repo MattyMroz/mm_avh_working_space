@@ -1,5 +1,6 @@
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from io import StringIO
 from msvcrt import getch
 from os import cpu_count, listdir, makedirs, path
 from shutil import rmtree
@@ -7,12 +8,14 @@ from threading import Lock
 from typing import Dict, List, Set
 
 from natsort import natsorted
+from rich.console import Console
 
 from constants import (WORKING_SPACE,
                        WORKING_SPACE_OUTPUT,
                        WORKING_SPACE_TEMP,
                        WORKING_SPACE_TEMP_MAIN_SUBS,
                        WORKING_SPACE_TEMP_ALT_SUBS,
+                       CONSOLE_THEME,
                        console)
 
 from data.settings import Settings
@@ -115,10 +118,36 @@ def extract_tracks_from_mkv(auto: bool = False) -> Set[str]:  # ✅
     # Extraction is I/O-bound (mkvextract subprocess + disk), so threads scale it
     # well on an SSD. A per-file failure must not abort the rest of the batch.
     polish_lock: Lock = Lock()
+    # Guards atomic flushing of each thread's buffered output (auto mode only)
+    # so per-file blocks are never interleaved in the shared console.
+    print_lock: Lock = Lock()
 
     def _extract_one(filename: str) -> None:
-        mkv: MkvToolNix = MkvToolNix(filename)
-        mkv.mkv_extract_track(mkv.get_mkv_info(), auto_mode=auto)
+        # In manual mode _prompt_tracks_to_extract() calls input(), so output
+        # must go straight to the real console — buffering would hide the
+        # prompt from the user and desync it from their answer. Only auto mode
+        # (no prompts) can safely buffer per-thread and flush as one block.
+        if auto:
+            buffer: StringIO = StringIO()
+            thread_console: Console = Console(
+                file=buffer, color_system="truecolor", theme=CONSOLE_THEME,
+                force_terminal=True, width=console.size.width)
+            mkv: MkvToolNix = MkvToolNix(filename, console=thread_console)
+        else:
+            mkv = MkvToolNix(filename)
+
+        try:
+            mkv.mkv_extract_track(mkv.get_mkv_info(), auto_mode=auto)
+        finally:
+            if auto:
+                # Write the pre-rendered ANSI text straight to the console's
+                # underlying stream. console.print() must NOT be used here: it
+                # would re-parse the already-rendered escape codes as plain
+                # text (highlighting the "[" / "]" bytes) and corrupt them.
+                with print_lock:
+                    console.file.write(buffer.getvalue())
+                    console.file.flush()
+
         if mkv.subtitle_already_target_lang:
             with polish_lock:
                 already_polish.add(filename[:-4])
@@ -131,8 +160,11 @@ def extract_tracks_from_mkv(auto: bool = False) -> Set[str]:  # ✅
             try:
                 future.result()
             except Exception as exc:
-                console.print(
-                    f'Błąd wypakowywania {name}: {exc}', style='red_bold')
+                # Same lock as the per-file flush: keeps this line from landing
+                # in the middle of another thread's buffered block.
+                with print_lock:
+                    console.print(
+                        f'Błąd wypakowywania {name}: {exc}', style='red_bold')
 
     return already_polish
 
