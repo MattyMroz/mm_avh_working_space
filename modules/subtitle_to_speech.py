@@ -936,13 +936,26 @@ class SubtitleToSpeech:
             output_file: str = path.join(
                 self.working_space_output, file_name + ".eac3")
 
+            # Skip empty/garbage narrator audio (e.g. when the main subtitle was
+            # empty — an ASS with no Dialogue lines): don't build a broken output
+            # file, just drop the stray input.
+            main_subs_file_duration: float = self._get_file_duration(
+                main_subs_file_path)
+            if main_subs_file_duration <= 0.0:
+                console.print(
+                    f'Pomijam łączenie — brak audio lektora (puste napisy?): {file_name}',
+                    style='yellow_bold',
+                )
+                remove(main_subs_file_path)
+                self._remove_same_name_files(
+                    self.working_space_temp_main_subs, file_name)
+                continue
+
             if file_name in tmp_files_dict:
                 tmp_file: str = tmp_files_dict[file_name]
                 tmp_file_path: str = path.join(
                     self.working_space_temp, tmp_file)
 
-                main_subs_file_duration: float = self._get_file_duration(
-                    main_subs_file_path)
                 tmp_file_duration: float = self._get_file_duration(
                     tmp_file_path)
 
@@ -1072,6 +1085,26 @@ class SubtitleToSpeech:
             if path.isfile(full) and path.splitext(file)[0] == file_name:
                 remove(full)
 
+    def _subtitle_is_empty(self) -> bool:
+        """Check whether the subtitle file has no usable text lines.
+
+        Returns True when the file is missing, zero-length, or parses to zero
+        subtitle entries (e.g. an ASS that had no Dialogue lines and produced an
+        empty SRT). Any parse error is treated as "not empty" so a malformed but
+        non-trivial file still reaches the engine and fails loudly there.
+
+        Returns:
+            True if there is nothing to voice, False otherwise.
+        """
+        file_path: str = path.join(self.working_space_temp_main_subs, self.filename)
+        if not path.isfile(file_path) or stat(file_path).st_size == 0:
+            return True
+        try:
+            subtitles: pysrt.SubRipFile = pysrt.open(file_path, encoding='ANSI')
+        except (UnicodeDecodeError, OSError, ValueError):
+            return False
+        return len(subtitles) == 0
+
     def generate_audio(self, settings: Settings):
         """
             Generates the audio file from the subtitle file using the specified TTS settings.
@@ -1093,6 +1126,15 @@ class SubtitleToSpeech:
         console.print("Rozpoczynam generowanie pliku audio...",
                       style='green_bold', end=' ')
         console.print(self.filename, style='white_bold')
+
+        # Guard: an empty subtitle file (e.g. an ASS with no Dialogue lines after
+        # splitting) has nothing to voice. Skip it so we never emit a garbage WAV.
+        if self._subtitle_is_empty():
+            console.print(
+                "Pomijam — brak napisów do udźwiękowienia (pusty plik).",
+                style='yellow_bold')
+            return
+
         if tts == "TTS - Zosia - Harpo":
             self.srt_to_wav_harpo(tts_speed, tts_volume)
         elif tts == "TTS - Agnieszka - Ivona":
