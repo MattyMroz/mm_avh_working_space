@@ -20,7 +20,7 @@ import sys
 from subprocess import Popen, PIPE, CalledProcessError
 from json import loads
 from typing import Any, Dict, List, Set
-from os import path
+from os import path, stat
 from dataclasses import dataclass
 
 from constants import (WORKING_SPACE,
@@ -32,6 +32,10 @@ from constants import (WORKING_SPACE,
                        console)
 
 from modules.track_selector import select_audio_track, select_subtitle_track
+
+# Below this size an extracted track is treated as incomplete/garbage, so the
+# cache guard re-extracts it instead of trusting a truncated leftover file.
+MIN_EXTRACTED_BYTES: int = 1024
 
 
 @dataclass(slots=True)
@@ -232,6 +236,15 @@ class MkvToolNix:
                 format_extension: str = self._get_format_extension(codec_id)
                 filename: str = f'{self.filename[:-4]}.{format_extension}'
                 out_file: str = path.join(self.working_space_temp, filename)
+
+                # Skip re-extraction when a complete file is already there — this
+                # makes repeated runs skip the whole extraction of that track.
+                if path.isfile(out_file) and stat(out_file).st_size >= MIN_EXTRACTED_BYTES:
+                    console.print(
+                        f'Pomijam ekstrakcję (plik już istnieje): {filename}',
+                        style='green_bold')
+                    continue
+
                 command: List[str] = self._get_extract_command(
                     track_id, out_file)
 
