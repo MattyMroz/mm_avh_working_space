@@ -21,7 +21,9 @@ from subprocess import Popen, PIPE, CalledProcessError
 from json import loads
 from typing import Any, Dict, List, Set
 from os import path, stat
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+from rich.console import Console
 
 from constants import (WORKING_SPACE,
                        WORKING_SPACE_OUTPUT,
@@ -67,6 +69,9 @@ class MkvToolNix:
     mkv_info_path: str = MKV_INFO_PATH
     mkv_propedit_path: str = MKV_PROPEDIT_PATH
     subtitle_already_target_lang: bool = False
+    # Per-instance console so a caller can redirect output (e.g. to a per-thread
+    # buffer for clean parallel logging). Defaults to the global console.
+    console: Console = field(default=console)
 
     def _check_executables(self) -> None:
         """
@@ -77,7 +82,7 @@ class MkvToolNix:
                                   self.mkv_merge_path, self.mkv_info_path]
         for executable in executables:
             if not path.exists(executable):
-                console.print(
+                self.console.print(
                     f'Error: {executable} not found.', style='red_bold')
                 sys.exit()
 
@@ -102,9 +107,9 @@ class MkvToolNix:
                     self._print_mkv_info(tracks_data)
                     return data
 
-                console.print(f'Error: {error}', style='red_bold')
+                self.console.print(f'Error: {error}', style='red_bold')
         except (FileNotFoundError, CalledProcessError) as error:
-            console.print(f'Error: {error}', style='red_bold')
+            self.console.print(f'Error: {error}', style='red_bold')
             sys.exit()
         return {}
 
@@ -191,14 +196,14 @@ class MkvToolNix:
             Args:
                 - tracks_data (List[dict]): A list of dictionaries, each representing a track in the MKV file.
         """
-        console.print('WYODRĘBNIANIE Z PLIKU:',
+        self.console.print('WYODRĘBNIANIE Z PLIKU:',
                       style='yellow_bold')
-        console.print(self.filename, style='white_bold')
-        console.print('ID  TYPE        CODEK                LANG  LANG_IETF  PROPERTIES',
+        self.console.print(self.filename, style='white_bold')
+        self.console.print('ID  TYPE        CODEK                LANG  LANG_IETF  PROPERTIES',
                       style='yellow_bold')
 
         for track in tracks_data:
-            console.print(
+            self.console.print(
                 f'[yellow_bold]{track["id"]:2}[/yellow_bold]  '
                 f'[white_bold]{track["type"]:10}  '
                 f'{track["codec_id"]:20} '
@@ -206,7 +211,7 @@ class MkvToolNix:
                 f'{track["language_ietf"]:10} '
                 f'{track["properties"]}'
             )
-        console.print()
+        self.console.print()
 
     def mkv_extract_track(self, data: Dict[str, Any], auto_mode: bool = False) -> None:
         """
@@ -240,7 +245,7 @@ class MkvToolNix:
                 # Skip re-extraction when a complete file is already there — this
                 # makes repeated runs skip the whole extraction of that track.
                 if path.isfile(out_file) and stat(out_file).st_size >= MIN_EXTRACTED_BYTES:
-                    console.print(
+                    self.console.print(
                         f'Pomijam ekstrakcję (plik już istnieje): {filename}',
                         style='green_bold')
                     continue
@@ -249,19 +254,19 @@ class MkvToolNix:
                     track_id, out_file)
 
                 with Popen(command) as process:
-                    console.print(
+                    self.console.print(
                         f'\nEkstrakcja ścieżki {track_id} do pliku {filename}', style='yellow_bold')
                     process.wait()
 
         except (IndexError, KeyError):
-            console.print(
+            self.console.print(
                 'Znaleziono nieprawidłowe ID ścieżki!', style='red_bold')
             # Re-prompting only makes sense in manual mode; an auto re-run would
             # deterministically pick the same invalid id and loop forever.
             if not auto_mode:
                 self.mkv_extract_track(data)
 
-        console.print(
+        self.console.print(
             'Ekstrakcja zakończona pomyślnie.\n', style='green_bold')
 
     def _prompt_tracks_to_extract(self, data: Dict[str, Any]) -> Set[int]:
@@ -279,7 +284,7 @@ class MkvToolNix:
 
         while True:
             try:
-                console.print('Podaj ID ścieżki do wyciągnięcia (naciśnij ENTER, aby zakończyć): ',
+                self.console.print('Podaj ID ścieżki do wyciągnięcia (naciśnij ENTER, aby zakończyć): ',
                               style='green_bold', end='')
                 track_input: str = input().strip()
                 if not track_input:
@@ -289,10 +294,10 @@ class MkvToolNix:
                 if track_id in valid_track_range:
                     tracks_to_extract.add(track_id)
                 else:
-                    console.print(
+                    self.console.print(
                         'Nieprawidłowy ID ścieżki. Proszę podać poprawny numer ścieżki.\n', style='red_bold')
             except ValueError:
-                console.print(
+                self.console.print(
                     'Pominięto wyciąganie ścieżki.\n', style='red_bold')
 
         return tracks_to_extract
@@ -324,7 +329,7 @@ class MkvToolNix:
 
         audio_lang: str = self._track_language(tracks, audio_id)
         sub_lang: str = self._track_language(tracks, sub_id)
-        console.print(
+        self.console.print(
             f'AUTO: ścieżka audio {audio_id if audio_id is not None else "brak"} ({audio_lang}), '
             f'napisy {sub_id if sub_id is not None else "brak"} ({sub_lang})',
             style='yellow_bold')

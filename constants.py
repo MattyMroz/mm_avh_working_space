@@ -80,7 +80,7 @@ AudioSegment.ffmpeg = FFMPEG_PATH
 AudioSegment.ffprobe = FFPROBE_PATH
 
 # Rich print styles
-console: Console = Console(color_system="truecolor", theme=Theme({
+CONSOLE_THEME: Theme = Theme({
     "purple_bold": "purple bold",
     "purple_italic": "purple italic",
     "pink_bold": "pale_violet_red1 bold",
@@ -104,7 +104,8 @@ console: Console = Console(color_system="truecolor", theme=Theme({
     "black_bold": "rgb(0,0,0) on white bold",
     "black_italic": "rgb(0,0,0) on white italic",
     "repr.number": "bright_red bold",
-}))
+})
+console: Console = Console(color_system="truecolor", theme=CONSOLE_THEME)
 
 # console.print("╚═══ Multimedia Magic – Audio Visual Heaven ═══╝", style="purple_bold")
 # console.print("╚═══ Multimedia Magic – Audio Visual Heaven ═══╝", style="purple_italic")
