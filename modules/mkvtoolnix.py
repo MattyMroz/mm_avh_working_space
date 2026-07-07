@@ -33,9 +33,11 @@ from constants import (WORKING_SPACE,
 
 from modules.track_selector import select_audio_track, select_subtitle_track
 
-# Below this size an extracted track is treated as incomplete/garbage, so the
-# cache guard re-extracts it instead of trusting a truncated leftover file.
-MIN_EXTRACTED_BYTES: int = 1024
+# Below this size an extracted track is treated as empty/garbage, so the cache
+# guard re-extracts it instead of trusting a truncated leftover. Kept low (64 B)
+# on purpose: subtitle tracks (.srt/.ass) can be small but valid, so a higher
+# threshold would needlessly re-extract complete small subtitle files.
+MIN_EXTRACTED_BYTES: int = 64
 
 
 @dataclass(slots=True)

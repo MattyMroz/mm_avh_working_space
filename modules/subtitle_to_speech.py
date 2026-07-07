@@ -1105,21 +1105,12 @@ class SubtitleToSpeech:
             return False
         return len(subtitles) == 0
 
-    def generate_audio(self, settings: Settings, defer_merge: bool = False) -> bool:
+    def generate_audio(self, settings: Settings) -> None:
         """
             Generates the audio file from the subtitle file using the specified TTS settings.
 
             Args:
                 - settings (Settings): The TTS settings to use.
-                - defer_merge (bool): When True, skip the final merge_tts_audio()
-                    step and return True instead, so the caller can run the merge
-                    (ffmpeg, CPU/IO-bound) in a background thread while the next
-                    episode's audio is already being generated. Default False
-                    keeps the original inline behaviour for the manual flow.
-
-            Returns:
-                - bool: True when audio was produced and a deferred merge is still
-                    pending (only possible with defer_merge=True); False otherwise.
         """
         tts: str = settings.tts or ''
         tts_speed: str = settings.tts_speed or ''
@@ -1142,7 +1133,7 @@ class SubtitleToSpeech:
             console.print(
                 "Pomijam — brak napisów do udźwiękowienia (pusty plik).",
                 style='yellow_bold')
-            return False
+            return
 
         if tts == "TTS - Zosia - Harpo":
             self.srt_to_wav_harpo(tts_speed, tts_volume)
@@ -1169,12 +1160,7 @@ class SubtitleToSpeech:
             "Generowanie pliku audio zakończone.", style='green_bold')
 
         self._apply_post_processing(settings)
-        if defer_merge:
-            # Caller will run merge_tts_audio() in the background; audio of the
-            # next episode can start now instead of waiting for ffmpeg.
-            return True
         self.merge_tts_audio()
-        return False
 
     def _apply_post_processing(self, settings: Settings) -> None:
         """Applies FFmpeg volume adjustment to the whole generated WAV.
