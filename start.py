@@ -360,7 +360,7 @@ def generate_audio_for_subtitles(settings: Settings, auto: bool = False) -> None
             filename: True for filename in main_subs_files}
     else:
         files_to_generate_audio = ask_to_generate_audio_files(main_subs_files)
-    generate_audio_files(files_to_generate_audio, settings)
+    generate_audio_files(files_to_generate_audio, settings, auto=auto)
 
 
 def ask_to_generate_audio_files(files: List[str]) -> Dict[str, bool]:
@@ -385,19 +385,51 @@ def ask_to_generate_audio_files(files: List[str]) -> Dict[str, bool]:
     return files_to_generate_audio
 
 
-def generate_audio_files(files_to_generate_audio: Dict[str, bool], settings: Settings) -> None:
+def generate_audio_files(files_to_generate_audio: Dict[str, bool], settings: Settings,
+                         auto: bool = False) -> None:
     """
         Generates audio for the specified files.
+
+        In auto mode the per-file merge (ffmpeg eac3, CPU/IO-bound) runs in a
+        background thread pool, so the next file's audio generation starts without
+        waiting for the previous merge to finish — the merge time overlaps the
+        next audio instead of adding to it. Audio generation itself stays
+        sequential (bound by the TTS API, not by the machine). Manual mode keeps
+        the original inline behaviour.
 
         Args:
             files_to_generate_audio (Dict[str, bool]): A dictionary mapping file names to a boolean indicating whether the user wants to generate audio for them.
             settings (Settings): The settings to use for audio generation.
+            auto (bool): When True, defer each file's merge to a background pool.
     """
-    audio_generator: SubtitleToSpeech
-    for filename, should_generate_audio in files_to_generate_audio.items():
-        if should_generate_audio:
+    if not auto:
+        for filename, should_generate_audio in files_to_generate_audio.items():
+            if should_generate_audio:
+                SubtitleToSpeech(filename).generate_audio(settings)
+        return
+
+    # Auto: generate audio sequentially, but hand each finished episode's merge
+    # to a SINGLE background worker. The merge of episode N then overlaps the
+    # audio generation of episode N+1 (the real win) — while staying serialized,
+    # because merge_tts_audio scans the shared main_subs/temp dirs and removes
+    # files by name, so two concurrent merges would clobber each other. One
+    # worker keeps the overlap without the collision. A merge failure is isolated.
+    pending: List[str] = [name for name, do in files_to_generate_audio.items() if do]
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        merge_futures = {}
+        for filename in pending:
             audio_generator = SubtitleToSpeech(filename)
-            audio_generator.generate_audio(settings)
+            has_pending_merge = audio_generator.generate_audio(settings, defer_merge=True)
+            if has_pending_merge:
+                future = pool.submit(audio_generator.merge_tts_audio)
+                merge_futures[future] = filename
+        for future in as_completed(merge_futures):
+            name = merge_futures[future]
+            try:
+                future.result()
+            except Exception as exc:
+                console.print(
+                    f'Błąd łączenia audio {name}: {exc}', style='red_bold')
 
 
 def refactor_alt_subtitles():  # ✅
