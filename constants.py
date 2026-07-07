@@ -38,6 +38,28 @@ WORKING_SPACE_TEMP: str = path.join(WORKING_SPACE, 'temp')
 WORKING_SPACE_TEMP_MAIN_SUBS: str = path.join(WORKING_SPACE_TEMP, 'main_subs')
 WORKING_SPACE_TEMP_ALT_SUBS: str = path.join(WORKING_SPACE_TEMP, 'alt_subs')
 
+
+def episode_temp_dirs(episode_stem: str) -> dict[str, str]:
+    """Build a per-episode set of temp folders isolated from other episodes.
+
+    Auto-mode pipelining processes several episodes at once; giving each its own
+    subfolder tree prevents files (including generically-named ones like temp.wav
+    or the elevenbytes cache) from overwriting each other in the shared temp dir.
+
+    Args:
+        episode_stem: Base name of the episode (MKV filename without extension).
+
+    Returns:
+        Mapping with keys 'temp', 'main_subs', 'alt_subs' → absolute paths under
+        working_space/temp/<episode_stem>/.
+    """
+    base: str = path.join(WORKING_SPACE_TEMP, episode_stem)
+    return {
+        'temp': base,
+        'main_subs': path.join(base, 'main_subs'),
+        'alt_subs': path.join(base, 'alt_subs'),
+    }
+
 # Paths for mkvtoolnix
 MKVTOOLNIX_FOLDER: str = path.join(
     path.abspath(path.join(getcwd(), pardir)),

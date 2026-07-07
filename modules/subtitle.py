@@ -83,8 +83,11 @@ class SubtitleRefactor:
     working_space: str = WORKING_SPACE
     working_space_output: str = WORKING_SPACE_OUTPUT
     working_space_temp: str = WORKING_SPACE_TEMP
-    working_space_temp_main_subs = WORKING_SPACE_TEMP_MAIN_SUBS
-    working_space_temp_alt_subs = WORKING_SPACE_TEMP_ALT_SUBS
+    # These MUST carry a type annotation, otherwise dataclass treats them as
+    # shared class attributes (not per-instance fields) and per-episode path
+    # injection through the constructor would silently not take effect.
+    working_space_temp_main_subs: str = WORKING_SPACE_TEMP_MAIN_SUBS
+    working_space_temp_alt_subs: str = WORKING_SPACE_TEMP_ALT_SUBS
 
     def split_ass(self, auto_mode: bool = False) -> None:
         """
