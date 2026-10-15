@@ -68,6 +68,42 @@ class SubtitleTranslator:
     working_space_temp_alt_subs: str = WORKING_SPACE_TEMP_ALT_SUBS
 
     @staticmethod
+    def _open_subs(file_path: str) -> pysrt.SubRipFile:
+        """Open an SRT file, tolerating files already converted to ANSI.
+
+        The TTS step rewrites subtitles in place as ANSI (cp1250), so a file
+        that went through it is no longer valid UTF-8 and fails on the first
+        Polish character. Fall back to cp1250 in that case.
+
+        Args:
+            file_path: Full path to the subtitle file.
+
+        Returns:
+            The parsed subtitle file.
+        """
+        try:
+            return pysrt.open(file_path, encoding='utf-8')
+        except UnicodeDecodeError:
+            return pysrt.open(file_path, encoding='cp1250')
+
+    @staticmethod
+    def _read_text(file_path: str) -> str:
+        """Read a subtitle file as text, tolerating ANSI-encoded files.
+
+        Args:
+            file_path: Full path to the subtitle file.
+
+        Returns:
+            The file contents.
+        """
+        try:
+            with open(file_path, 'r', encoding='utf-8') as file:
+                return file.read()
+        except UnicodeDecodeError:
+            with open(file_path, 'r', encoding='cp1250') as file:
+                return file.read()
+
+    @staticmethod
     def _clean_subtitle_text(text: str) -> str:
         """Strip leftover markup before translation, keeping line breaks intact.
 
@@ -111,7 +147,8 @@ class SubtitleTranslator:
             """Synchronous wrapper for async translate"""
             return asyncio_run(_translate_async(text, dest))
         
-        subs: pysrt.SubRipFile = pysrt.open(path.join(dir_path, filename), encoding='utf-8')
+        subs: pysrt.SubRipFile = SubtitleTranslator._open_subs(
+            path.join(dir_path, filename))
 
         ZWSP: str = "\u200B"  # zero-width space wrapping the markers
         SEPARATOR: str = f"{ZWSP}###{ZWSP}"
@@ -187,8 +224,8 @@ class SubtitleTranslator:
                 - translated_line_count (int): The number of lines to translate at a time.
                 - deepl_api_key (str): The API key for the DeepL translator.
         """
-        subs: pysrt.SubRipFile = pysrt.open(
-            path.join(dir_path, filename), encoding='utf-8')
+        subs: pysrt.SubRipFile = SubtitleTranslator._open_subs(
+            path.join(dir_path, filename))
         translator: deepl.Translator = deepl.Translator(deepl_api_key)
 
         NEWLINE_MARKER: str = " ◍◍◍◍ "
@@ -268,8 +305,8 @@ class SubtitleTranslator:
             pyautogui.hotkey('ctrl', 'a')
             pyautogui.hotkey('ctrl', 'c')
 
-        subs: pysrt.SubRipFile = pysrt.open(
-            path.join(dir_path, filename), encoding='utf-8')
+        subs: pysrt.SubRipFile = SubtitleTranslator._open_subs(
+            path.join(dir_path, filename))
         groups: List[List[pysrt.SubRipItem]] = [subs[i:i+translated_line_count]
                                                 for i in range(0, len(subs), translated_line_count)]
 
@@ -295,8 +332,7 @@ class SubtitleTranslator:
                              "\nTranslated with www.DeepL.com/Translator (free version)\n",
                              "\nTranslated with www.DeepL.com/Translator (free version)"]
 
-        with open(path.join(dir_path, filename), 'r', encoding='utf-8') as in_file:
-            text = in_file.read()
+        text = SubtitleTranslator._read_text(path.join(dir_path, filename))
 
         for freze in frezes:
             text = text.replace(freze, "")
