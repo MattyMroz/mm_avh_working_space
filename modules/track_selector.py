@@ -75,7 +75,7 @@ _LINES_DIVISOR: Final[float] = 1000.0
 # rather than the full dialogue. Matched against the track name only -- the
 # ``forced`` *property* flag is unreliable, since complete dialogue tracks are
 # sometimes shipped flagged forced.
-_RE_SIGNS: Final[re.Pattern[str]] = re.compile(r"sign|song|forced", re.I)
+_RE_SIGNS: Final[re.Pattern[str]] = re.compile(r"sign|song|forced", re.IGNORECASE)
 
 
 def _track_name(track: dict) -> str:

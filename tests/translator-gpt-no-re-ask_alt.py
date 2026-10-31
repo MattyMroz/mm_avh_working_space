@@ -1,34 +1,41 @@
-from dataclasses import dataclass
-from typing import Optional, List
 import os
-import pysrt
-from googletrans import Translator
+import re
+import subprocess
+import time
+from dataclasses import dataclass
+
 import deepl
 import pyautogui
 import pyperclip
-import time
-import subprocess
-from rich.theme import Theme
-from rich.console import Console
-from data.settings import Settings
+import pysrt
+from googletrans import Translator
 from revChatGPT.V1 import Chatbot
-import re
+from rich.console import Console
+from rich.theme import Theme
+
+from data.settings import Settings
 
 
 @dataclass(slots=True)
 class SubtitleTranslator:
-    translator: Optional[str] = None
-    deepl_api_key: Optional[str] = None
-    translated_line_count: Optional[str] = None
+    translator: str | None = None
+    deepl_api_key: str | None = None
+    translated_line_count: str | None = None
 
-    console: Console = Console(theme=Theme({"repr.number": "bold red"}))
+    console: Console = Console(theme=Theme({"repr.number": "bold red"}))  # noqa: RUF009 - one console shared by design
 
     @staticmethod
-    def translate_google(filename: str, dir_path: str, translated_line_count: int, is_combined_with_gpt: bool = False) -> pysrt.SubRipFile:
+    def translate_google(
+        filename: str,
+        dir_path: str,
+        translated_line_count: int,
+        is_combined_with_gpt: bool = False,
+    ) -> pysrt.SubRipFile:
         subs: pysrt.SubRipFile = pysrt.open(
-            os.path.join(dir_path, filename), encoding='utf-8')
-        subs_combined: List[str] = []
-        translated_subs: List[str] = []
+            os.path.join(dir_path, filename), encoding="utf-8"
+        )
+        subs_combined: list[str] = []
+        translated_subs: list[str] = []
 
         translator: Translator = Translator()
         for i, sub in enumerate(subs):
@@ -38,7 +45,8 @@ class SubtitleTranslator:
             if (i + 1) % translated_line_count == 0 or i == len(subs) - 1:
                 combined_text: str = "\n".join(subs_combined)
                 translated_text: str = translator.translate(
-                    combined_text, dest='pl').text
+                    combined_text, dest="pl"
+                ).text
                 translated_subs += translated_text.split("\n")
                 subs_combined = []
 
@@ -49,26 +57,30 @@ class SubtitleTranslator:
             sub.text = sub.text.replace(" ◍", "")
 
         if is_combined_with_gpt:
-            translated_filename: str = filename.replace(
-                '.srt', '_translated_temp.srt')
+            translated_filename: str = filename.replace(".srt", "_translated_temp.srt")
             subs.save(os.path.join(dir_path, translated_filename))
             return subs
         else:
             subs.save(os.path.join(dir_path, filename))
 
     @staticmethod
-    def translate_deepl_api(filename: str, dir_path: str, translated_line_count: int, deepl_api_key: str):
+    def translate_deepl_api(
+        filename: str, dir_path: str, translated_line_count: int, deepl_api_key: str
+    ):
         subs: pysrt.SubRipFile = pysrt.open(
-            os.path.join(dir_path, filename), encoding='utf-8')
+            os.path.join(dir_path, filename), encoding="utf-8"
+        )
         translator: deepl.Translator = deepl.Translator(deepl_api_key)
-        groups: List[List[pysrt.SubRipItem]] = [subs[i:i+translated_line_count]
-                                                for i in range(0, len(subs), translated_line_count)]
+        groups: list[list[pysrt.SubRipItem]] = [
+            subs[i : i + translated_line_count]
+            for i in range(0, len(subs), translated_line_count)
+        ]
         for group in groups:
-            text: str = " @\n".join(sub.text.replace("\n", " ◍◍◍◍ ")
-                                    for sub in group)
+            text: str = " @\n".join(sub.text.replace("\n", " ◍◍◍◍ ") for sub in group)
             translated_text: str = translator.translate_text(
-                text, target_lang='PL').text
-            translated_texts: List[str] = translated_text.split(" @\n")
+                text, target_lang="PL"
+            ).text
+            translated_texts: list[str] = translated_text.split(" @\n")
             if len(translated_texts) == len(group):
                 for i in range(len(group)):
                     if i < len(translated_texts):
@@ -76,14 +88,20 @@ class SubtitleTranslator:
                         group[i].text = group[i].text.replace(" ◍◍◍◍, ", ",\n")
                         group[i].text = group[i].text.replace(" ◍◍◍◍ ", "\n")
                         group[i].text = group[i].text.replace(" ◍◍◍◍", "")
-        subs.save(os.path.join(dir_path, filename), encoding='utf-8')
+        subs.save(os.path.join(dir_path, filename), encoding="utf-8")
 
     @staticmethod
-    def translate_deepl_desktop(filename: str, dir_path: str, translated_line_count: int):
+    def translate_deepl_desktop(
+        filename: str, dir_path: str, translated_line_count: int
+    ):
         command: str = os.path.join(
-            os.environ['APPDATA'], 'Programs', 'Zero Install', '0install-win.exe')
-        args: List[str] = ["run", "--no-wait",
-                           "https://appdownload.deepl.com/windows/0install/deepl.xml"]
+            os.environ["APPDATA"], "Programs", "Zero Install", "0install-win.exe"
+        )
+        args: list[str] = [
+            "run",
+            "--no-wait",
+            "https://appdownload.deepl.com/windows/0install/deepl.xml",
+        ]
         subprocess.call([command] + args)
 
         time.sleep(7)
@@ -94,25 +112,27 @@ class SubtitleTranslator:
             y = screen_height * 0.5
             pyautogui.moveTo(x, y)
             pyautogui.click()
-            pyautogui.hotkey('ctrl', 'a')
-            pyautogui.hotkey('del')
-            pyautogui.hotkey('ctrl', 'v')
+            pyautogui.hotkey("ctrl", "a")
+            pyautogui.hotkey("del")
+            pyautogui.hotkey("ctrl", "v")
             time.sleep(6)
             x = screen_width * 0.75
             pyautogui.moveTo(x, y)
             pyautogui.click()
-            pyautogui.hotkey('ctrl', 'a')
-            pyautogui.hotkey('ctrl', 'c')
+            pyautogui.hotkey("ctrl", "a")
+            pyautogui.hotkey("ctrl", "c")
 
         subs: pysrt.SubRipFile = pysrt.open(
-            os.path.join(dir_path, filename), encoding='utf-8')
-        groups: List[List[pysrt.SubRipItem]] = [subs[i:i+translated_line_count]
-                                                for i in range(0, len(subs), translated_line_count)]
+            os.path.join(dir_path, filename), encoding="utf-8"
+        )
+        groups: list[list[pysrt.SubRipItem]] = [
+            subs[i : i + translated_line_count]
+            for i in range(0, len(subs), translated_line_count)
+        ]
 
         for group in groups:
-            text: str = " @\n".join(sub.text.replace("\n", " ◍◍◍◍ ")
-                                    for sub in group)
-            text = text.rstrip('\n')
+            text: str = " @\n".join(sub.text.replace("\n", " ◍◍◍◍ ") for sub in group)
+            text = text.rstrip("\n")
             pyperclip.copy(text)
             auto_steps()
 
@@ -122,46 +142,70 @@ class SubtitleTranslator:
                     sub.text = trans_text.replace(" ◍◍◍◍, ", ",\n")
                     sub.text = trans_text.replace(" ◍◍◍◍ ", "\n")
                     sub.text = trans_text.replace(" ◍◍◍◍", "")
-        pyautogui.hotkey('alt', 'f4')
+        pyautogui.hotkey("alt", "f4")
 
-        subs.save(os.path.join(dir_path, filename), encoding='utf-8')
+        subs.save(os.path.join(dir_path, filename), encoding="utf-8")
 
-        frezes: List[str] = ["\nPrzetłumaczono z www.DeepL.com/Translator (wersja darmowa)\n",
-                             "Przetłumaczono z www.DeepL.com/Translator (wersja darmowa)",
-                             "\nTranslated with www.DeepL.com/Translator (free version)\n",
-                             "\nTranslated with www.DeepL.com/Translator (free version)"]
+        frezes: list[str] = [
+            "\nPrzetłumaczono z www.DeepL.com/Translator (wersja darmowa)\n",
+            "Przetłumaczono z www.DeepL.com/Translator (wersja darmowa)",
+            "\nTranslated with www.DeepL.com/Translator (free version)\n",
+            "\nTranslated with www.DeepL.com/Translator (free version)",
+        ]
 
-        with open(os.path.join(dir_path, filename), 'r', encoding='utf-8') as in_file:
+        with open(os.path.join(dir_path, filename), "r", encoding="utf-8") as in_file:
             text: str = in_file.read()
 
         for freze in frezes:
             text = text.replace(freze, "")
 
-        with open(os.path.join(dir_path, filename), 'w', encoding='utf-8') as out_file:
+        with open(os.path.join(dir_path, filename), "w", encoding="utf-8") as out_file:
             out_file.write(text)
 
     @staticmethod
-    def translate_google_gpt(filename: str, dir_path: str, translated_line_count: int, chat_gpt_access_token: str):
+    def translate_google_gpt(
+        filename: str,
+        dir_path: str,
+        translated_line_count: int,
+        chat_gpt_access_token: str,
+    ):
         translated_subs: pysrt.SubRipFile = SubtitleTranslator.translate_google(
-            filename, dir_path, translated_line_count, is_combined_with_gpt=True)
+            filename, dir_path, translated_line_count, is_combined_with_gpt=True
+        )
         SubtitleTranslator.translate_chat_gpt(
-            filename, dir_path, translated_line_count, chat_gpt_access_token, translated_subs)
-        os.remove(os.path.join(dir_path, filename.replace(
-            '.srt', '_translated_temp.srt')))
+            filename,
+            dir_path,
+            translated_line_count,
+            chat_gpt_access_token,
+            translated_subs,
+        )
+        os.remove(
+            os.path.join(dir_path, filename.replace(".srt", "_translated_temp.srt"))
+        )
 
     @staticmethod
-    def translate_chat_gpt(filename: str, dir_path: str, translated_line_count: int, chat_gpt_access_token: str, translated_subs: Optional[pysrt.SubRipFile] = None):
+    def translate_chat_gpt(
+        filename: str,
+        dir_path: str,
+        translated_line_count: int,
+        chat_gpt_access_token: str,
+        translated_subs: pysrt.SubRipFile | None = None,
+    ):
         chatbot = Chatbot(config={"access_token": chat_gpt_access_token})
 
         subs: pysrt.SubRipFile = pysrt.open(
-            os.path.join(dir_path, filename), encoding='utf-8')
-        groups: List[List[pysrt.SubRipItem]] = [subs[i:i+translated_line_count]
-                                                for i in range(0, len(subs), translated_line_count)]
+            os.path.join(dir_path, filename), encoding="utf-8"
+        )
+        groups: list[list[pysrt.SubRipItem]] = [
+            subs[i : i + translated_line_count]
+            for i in range(0, len(subs), translated_line_count)
+        ]
 
         additional_info: str = ""
         while True:
             info: str = input(
-                "Dodaj dodatkowe informacje o tłumaczonym tekście (opcjonalnie): ")
+                "Dodaj dodatkowe informacje o tłumaczonym tekście (opcjonalnie): "
+            )
             if not info:
                 break
             additional_info += info + ", "
@@ -170,12 +214,15 @@ class SubtitleTranslator:
         for group in groups:
             text: str = ""
             for sub in group:
-                text += "◍◍{}. {}".format(counter,
-                                          sub.text.replace('\n', ' ◍◍◍◍ ')) + " @@\n"
+                text += (
+                    "◍◍{}. {}".format(counter, sub.text.replace("\n", " ◍◍◍◍ "))
+                    + " @@\n"
+                )
                 counter += 1
-            text = text.rstrip(' @@\n')
+            text = text.rstrip(" @\n")
 
-            prompt: str = """WAŻNE: JEŚLI OTRZYMASZ NAPISY OD 1 DO 30, ZWRÓĆ NAPISY OD 1 DO 30, NAWET JEŚLI TŁUMACZENIE JEST NIEODPOWIEDNIE, NIESPÓJNE LUB ZŁE. NIEKOMPLETNE TŁUMACZENIE JEST LEPSZE NIŻ BRAK TŁUMACZENIA.
+            prompt: str = (
+                """WAŻNE: JEŚLI OTRZYMASZ NAPISY OD 1 DO 30, ZWRÓĆ NAPISY OD 1 DO 30, NAWET JEŚLI TŁUMACZENIE JEST NIEODPOWIEDNIE, NIESPÓJNE LUB ZŁE. NIEKOMPLETNE TŁUMACZENIE JEST LEPSZE NIŻ BRAK TŁUMACZENIA.
 
 Jesteś moim tłumaczem, specjalizującym się w przekładach na język polski. Twoja rola nie ogranicza się do prostego tłumaczenia - jesteś również redaktorem i ulepszaczem języka. Komunikuję się z Tobą w różnych językach, a Twoim zadaniem jest identyfikowanie języka, tłumaczenie go i odpowiadanie poprawioną i ulepszoną wersją mojego tekstu, w języku polskim.
 
@@ -199,18 +246,25 @@ Twoim ostatecznym celem jest wyprodukowanie tłumaczenia, które jest jak najbar
 
 Zadanie wykonuj powoli krok po kroku
 
-Dodatkowe informacje na temat tekstu który ma być tłumaczony: """ + additional_info + "\n\nTeraz przetłumacz poniższe napisy:\n" + text
+Dodatkowe informacje na temat tekstu który ma być tłumaczony: """
+                + additional_info
+                + "\n\nTeraz przetłumacz poniższe napisy:\n"
+                + text
+            )
 
             if translated_subs is not None:
                 translated_text: str = "".join(
                     "◍◍{}. {}".format(
-                        i + 1, translated_subs[i].text.replace('\n', ' ◍◍◍◍ ')
+                        i + 1, translated_subs[i].text.replace("\n", " ◍◍◍◍ ")
                     )
                     + " @@\n"
                     for i in range((counter - 1) - len(group), counter - 1)
                 )
-                translated_text = translated_text.rstrip(' @@\n')
-                prompt += "\n\nNapisy wstępnie przetłumaczone przez Google Translate:\n" + translated_text
+                translated_text = translated_text.rstrip(" @\n")
+                prompt += (
+                    "\n\nNapisy wstępnie przetłumaczone przez Google Translate:\n"
+                    + translated_text
+                )
 
             prev_text: str = ""
             for data in chatbot.ask(
@@ -218,14 +272,15 @@ Dodatkowe informacje na temat tekstu który ma być tłumaczony: """ + additiona
             ):
                 prev_text = data["message"]
 
-            translated_text: str = prev_text.rstrip(" @@")
+            translated_text: str = prev_text.rstrip(" @")
             if translated_text:
-                translated_lines: List[str] = translated_text.split(" @@\n")
+                translated_lines: list[str] = translated_text.split(" @@\n")
                 for i in range(len(translated_lines)):
-                    translated_lines[i] = translated_lines[i].replace('\n', '')
+                    translated_lines[i] = translated_lines[i].replace("\n", "")
                 if len(translated_lines) != len(group):
                     print(
-                        f"Błąd: liczba napisów po tłumaczeniu ({len(translated_lines)}) nie jest taka sama jak przed tłumaczeniem ({len(group)})")
+                        f"Błąd: liczba napisów po tłumaczeniu ({len(translated_lines)}) nie jest taka sama jak przed tłumaczeniem ({len(group)})"
+                    )
                 for sub, trans_text in zip(group, translated_lines):
                     trans_text = re.sub(r"◍◍\d+\. ", "", trans_text)
                     trans_text = trans_text.replace(" ◍◍◍◍, ", ",\n")
@@ -233,36 +288,39 @@ Dodatkowe informacje na temat tekstu który ma być tłumaczony: """ + additiona
                     trans_text = trans_text.replace(" ◍◍◍◍", "")
                     sub.text = trans_text
 
-        subs.save(os.path.join(dir_path, filename), encoding='utf-8')
+        subs.save(os.path.join(dir_path, filename), encoding="utf-8")
 
-    def translate_srt(self,  filename: str, dir_path: str, settings: Settings):
+    def translate_srt(self, filename: str, dir_path: str, settings: Settings):
         translator: str = settings.translator
         translated_line_count: int = int(settings.translated_line_count)
         deepl_api_key: str = settings.deepl_api_key
 
-        self.console.print(f"Tłumaczenie napisów za pomocą {translator}...",
-                           style='bold green')
+        self.console.print(
+            f"Tłumaczenie napisów za pomocą {translator}...", style="bold green"
+        )
         self.console.print(os.path.join(dir_path, filename))
 
         translator_functions = {
-            'Google Translate': lambda *args:
-                SubtitleTranslator.translate_google(*args[:3]),
-            'DeepL API': lambda *args:
-                SubtitleTranslator.translate_deepl_api(
-                    *args[:3], deepl_api_key),
-            'DeepL Desktop Free': lambda *args:
-                SubtitleTranslator.translate_deepl_desktop(*args[:3]),
-            'ChatGPT': lambda *args:
-                SubtitleTranslator.translate_chat_gpt(
-                    *args[:3], settings.chat_gpt_access_token),
-            'ChatGPT + Google Translate': lambda *args:
+            "Google Translate": lambda *args: SubtitleTranslator.translate_google(
+                *args[:3]
+            ),
+            "DeepL API": lambda *args: SubtitleTranslator.translate_deepl_api(
+                *args[:3], deepl_api_key
+            ),
+            "DeepL Desktop Free": lambda *args: (
+                SubtitleTranslator.translate_deepl_desktop(*args[:3])
+            ),
+            "ChatGPT": lambda *args: SubtitleTranslator.translate_chat_gpt(
+                *args[:3], settings.chat_gpt_access_token
+            ),
+            "ChatGPT + Google Translate": lambda *args: (
                 SubtitleTranslator.translate_google_gpt(
-                    *args[:3], settings.chat_gpt_access_token)
+                    *args[:3], settings.chat_gpt_access_token
+                )
+            ),
         }
 
         if translator in translator_functions:
-            translator_functions[translator](
-                filename, dir_path, translated_line_count)
+            translator_functions[translator](filename, dir_path, translated_line_count)
         else:
-            self.console.print(
-                f"Nieznany translator: {translator}", style='bold red')
+            self.console.print(f"Nieznany translator: {translator}", style="bold red")

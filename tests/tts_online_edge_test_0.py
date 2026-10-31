@@ -21,14 +21,14 @@ async def amain() -> None:
     """Main function"""
     communicate = edge_tts.Communicate(TEXT, VOICE)
     submaker = edge_tts.SubMaker()
-    with open(OUTPUT_FILE, "wb") as file:
+    with open(OUTPUT_FILE, "wb") as file:  # noqa: ASYNC230 - synchronous write is the existing behavior
         async for chunk in communicate.stream():
             if chunk["type"] == "audio":
                 file.write(chunk["data"])
             elif chunk["type"] == "WordBoundary":
                 submaker.create_sub((chunk["offset"], chunk["duration"]), chunk["text"])
 
-    with open(WEBVTT_FILE, "w", encoding="utf-8") as file:
+    with open(WEBVTT_FILE, "w", encoding="utf-8") as file:  # noqa: ASYNC230 - synchronous write is the existing behavior
         file.write(submaker.generate_subs())
 
 

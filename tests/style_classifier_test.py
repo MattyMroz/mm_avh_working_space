@@ -58,10 +58,14 @@ def test_dedup_collapses_animation() -> bool:
     subs = SSAFile()
     # 50 frames of "TYTUŁ" every 40ms is animation -> collapses to 1.
     for i in range(50):
-        subs.events.append(_make_event(start=i * 40, end=i * 40 + 40, style="TS", text="TYTUŁ"))
+        subs.events.append(
+            _make_event(start=i * 40, end=i * 40 + 40, style="TS", text="TYTUŁ")
+        )
     # "Cześć" three times at distant moments stays as 3 lines.
     for t in (10_000, 30_000, 60_000):
-        subs.events.append(_make_event(start=t, end=t + 1000, style="Default", text="Cześć"))
+        subs.events.append(
+            _make_event(start=t, end=t + 1000, style="Default", text="Cześć")
+        )
 
     deduped, removed = dedup_animation(list(subs.events))
     ts_kept = sum(1 for e in deduped if e.style == "TS")
@@ -90,7 +94,7 @@ def test_regression_vs_ground_truth() -> bool:
             continue
         try:
             subs = SSAFile.load(ass, encoding="utf-8")
-        except Exception:
+        except Exception:  # noqa: BLE001, S112 - unreadable files are skipped
             continue
         for v in classify_styles(subs):
             truth = gt[base].get(v.style)

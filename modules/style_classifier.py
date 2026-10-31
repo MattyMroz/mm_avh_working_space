@@ -39,21 +39,26 @@ _RE_DRAW: Final[re.Pattern[str]] = re.compile(_BACKSLASH + _BACKSLASH + r"p[1-9]
 _RE_POS: Final[re.Pattern[str]] = re.compile(
     _BACKSLASH + _BACKSLASH + r"(pos|move|clip|frz|fad|org|t\()"
 )
-_RE_KARA: Final[re.Pattern[str]] = re.compile(_BACKSLASH + _BACKSLASH + r"[kK][fo]?[0-9]")
+_RE_KARA: Final[re.Pattern[str]] = re.compile(
+    _BACKSLASH + _BACKSLASH + r"[kK][fo]?[0-9]"
+)
 _RE_PUNCT: Final[re.Pattern[str]] = re.compile(r'[.!?…»"]')
 
 # ── Style-name signatures (supporting, not decisive on their own) ───────────
 _RE_SONG: Final[re.Pattern[str]] = re.compile(
-    r"\bop\b|\bed\b|opening|ending|song|lyric|piosenk|karaoke|insert.?song|theme", re.I
+    r"\bop\b|\bed\b|opening|ending|song|lyric|piosenk|karaoke|insert.?song|theme",
+    re.IGNORECASE,
 )
 _RE_NOTE: Final[re.Pattern[str]] = re.compile(
-    r"disclaimer|\bnote\b|notka|przypis|tln|t/n|credit|copyright", re.I
+    r"disclaimer|\bnote\b|notka|przypis|tln|t/n|credit|copyright", re.IGNORECASE
 )
 _RE_SIGN: Final[re.Pattern[str]] = re.compile(
-    r"sign|znak|kartka|title|next_ep|acquired|chyron|chapter|^ts$|typeset|caption.?box|box$", re.I
+    r"sign|znak|kartka|title|next_ep|acquired|chyron|chapter|^ts$|typeset|caption.?box|box$",
+    re.IGNORECASE,
 )
 _RE_DLG: Final[re.Pattern[str]] = re.compile(
-    r"default|main|dialog|narrat|italic|flashback|tirets|thought|mysli|myśli|alter|overlap", re.I
+    r"default|main|dialog|narrat|italic|flashback|tirets|thought|mysli|myśli|alter|overlap",
+    re.IGNORECASE,
 )
 
 # ── Animation deduplication thresholds ──────────────────────────────────────
@@ -168,7 +173,9 @@ def dedup_animation(events: list[SSAEvent]) -> tuple[list[SSAEvent], int]:
     return keep, removed
 
 
-def _classify_metrics(metrics: _StyleMetrics, style: str, total: int) -> tuple[Category, float]:
+def _classify_metrics(
+    metrics: _StyleMetrics, style: str, total: int
+) -> tuple[Category, float]:
     """Classify a style from its deduplicated metrics.
 
     Args:
@@ -180,7 +187,12 @@ def _classify_metrics(metrics: _StyleMetrics, style: str, total: int) -> tuple[C
         Tuple of the category and the confidence.
     """
     n = metrics.n
-    pos, draw, kara, punct = metrics.pos / n, metrics.draw / n, metrics.kara / n, metrics.punct / n
+    pos, draw, kara, punct = (
+        metrics.pos / n,
+        metrics.draw / n,
+        metrics.kara / n,
+        metrics.punct / n,
+    )
     avg, frac = metrics.txt / n, metrics.n / total
 
     # Hard SIGN rules.

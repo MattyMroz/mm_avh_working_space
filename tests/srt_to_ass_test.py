@@ -42,14 +42,22 @@ def _build_ass(path: str) -> None:
     subs = SSAFile()
     subs.styles[STYLE] = subs.styles["Default"]
     subs.events = [
-        SSAEvent(start=1000, end=2000, style=STYLE,
-                 text="Tokyo", type="Dialogue"),
-        SSAEvent(start=3000, end=4000, style=STYLE,
-                 text="{\\pos(960,200)}Lab", type="Dialogue"),
-        SSAEvent(start=3000, end=4000, style=STYLE,
-                 text="m 0 0 l 186 0 l 186 76", type="Dialogue"),
-        SSAEvent(start=5000, end=6000, style=STYLE,
-                 text="Station", type="Dialogue"),
+        SSAEvent(start=1000, end=2000, style=STYLE, text="Tokyo", type="Dialogue"),
+        SSAEvent(
+            start=3000,
+            end=4000,
+            style=STYLE,
+            text="{\\pos(960,200)}Lab",
+            type="Dialogue",
+        ),
+        SSAEvent(
+            start=3000,
+            end=4000,
+            style=STYLE,
+            text="m 0 0 l 186 0 l 186 76",
+            type="Dialogue",
+        ),
+        SSAEvent(start=5000, end=6000, style=STYLE, text="Station", type="Dialogue"),
     ]
     with open(path, "w", encoding="utf-8") as file:
         file.write(subs.to_string(format_="ass"))
@@ -116,8 +124,7 @@ def test_merge_by_timing() -> bool:
 
         checks = [
             ("Tokyo -> Tokio", tokyo == "Tokio"),
-            ("tag preserved + translated",
-             lab == "{\\pos(960,200)}Laboratorium"),
+            ("tag preserved + translated", lab == "{\\pos(960,200)}Laboratorium"),
             ("drawing untouched", drawing == "m 0 0 l 186 0 l 186 76"),
             ("Station -> Stacja", station == "Stacja"),
         ]
@@ -128,10 +135,10 @@ def test_merge_by_timing() -> bool:
             ok = ok and passed
         if not ok:
             print(f"      got Tokyo   = {tokyo!r} (want 'Tokio')")
-            print(f"      got Lab     = {lab!r} "
-                  f"(want '{{\\pos(960,200)}}Laboratorium')")
-            print(f"      got drawing = {drawing!r} "
-                  f"(want 'm 0 0 l 186 0 l 186 76')")
+            print(
+                f"      got Lab     = {lab!r} (want '{{\\pos(960,200)}}Laboratorium')"
+            )
+            print(f"      got drawing = {drawing!r} (want 'm 0 0 l 186 0 l 186 76')")
             print(f"      got Station = {station!r} (want 'Stacja')")
         return ok
     finally:

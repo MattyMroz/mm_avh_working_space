@@ -38,6 +38,7 @@
 #     ask_chatGPT(prompt)
 #     prompt = input("You: ")
 import webbrowser
+
 from revChatGPT.V1 import Chatbot
 
 
@@ -56,9 +57,7 @@ chatbot = Chatbot(config={"access_token": get_access_token()})
 def ask_chatGPT(prompt):
     print("ChatGPT: ", end="")
     prev_text = ""
-    for data in chatbot.ask(
-        prompt
-    ):
+    for data in chatbot.ask(prompt):
         prev_text = data["message"]
     # print(prev_text)
     return prev_text

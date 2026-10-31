@@ -37,12 +37,13 @@ import asyncio
 import concurrent.futures
 import logging
 import shutil
-import threading
 import subprocess
 import tempfile
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Self
 
 import httpx
 
@@ -51,8 +52,12 @@ log = logging.getLogger("elevenbytes")
 # ─── Config ────────────────────────────────────────────────────────────────────
 
 API_KEY: str = "wqpwgoGhADAwIdb1JRNTAEBgg="
-API_URL_V6: str = "https://teamsp.org/xi/run6.php"  # silnik v6 — ElevenLabs v2 (bez voice_settings)
-API_URL_V7: str = "https://teamsp.org/xi/run7.php"  # silnik v7 — ElevenLabs v3 (+voice_settings)
+API_URL_V6: str = (
+    "https://teamsp.org/xi/run6.php"  # silnik v6 — ElevenLabs v2 (bez voice_settings)
+)
+API_URL_V7: str = (
+    "https://teamsp.org/xi/run7.php"  # silnik v7 — ElevenLabs v3 (+voice_settings)
+)
 API_URL: str = API_URL_V6  # domyślny endpoint (wsteczna kompatybilność)
 ENGINE_URLS: dict[str, str] = {"v6": API_URL_V6, "v7": API_URL_V7}
 DEFAULT_ENGINE: str = "v6"
@@ -73,7 +78,7 @@ SUPPORTED_FORMATS: frozenset[str] = frozenset({"mp3", "wav", "ogg", "flac"})
 VOICES: dict[str, tuple[str, str]] = {
     "dallin": ("Dallin — Storyteller", "alFofuDn3cOwyoz1i44T"),
     "sabine": ("Sabine — Fun and Dynamic Narrator", "BBz8H3kffyIUs3SYExlh"),
-    "tim": ("Tim — Clear, English and Neutral", "FxZjRiAEBESrb7srpme7")
+    "tim": ("Tim — Clear, English and Neutral", "FxZjRiAEBESrb7srpme7"),
 }
 
 
@@ -360,8 +365,13 @@ class TTS:
 
     # ── Sync wrappers ──────────────────────────────────────────────────────
 
-    def synthesize_sync(self, text: str, voice: str | None = None, fmt: str = "mp3",
-                        settings: VoiceSettings | None = None) -> bytes:
+    def synthesize_sync(
+        self,
+        text: str,
+        voice: str | None = None,
+        fmt: str = "mp3",
+        settings: VoiceSettings | None = None,
+    ) -> bytes:
         """Synchroniczna wersja synthesize()."""
         return self._run_sync(self.synthesize(text, voice, fmt=fmt, settings=settings))  # type: ignore[return-value]
 
@@ -399,12 +409,12 @@ class TTS:
         else:
             try:
                 asyncio.run(self.close())
-            except Exception:
+            except Exception:  # noqa: BLE001, S110 - cleanup is best effort
                 pass
 
     # ── Context manager ────────────────────────────────────────────────────
 
-    async def __aenter__(self) -> TTS:
+    async def __aenter__(self) -> Self:
         return self
 
     async def __aexit__(self, *exc: object) -> None:
@@ -446,11 +456,17 @@ class TTS:
     @staticmethod
     def _validate_text(text: str) -> None:
         if not isinstance(text, str):
-            raise TTSValidationError(f"text musi być str, dostałem {type(text).__name__}")
+            raise TTSValidationError(
+                f"text musi być str, dostałem {type(text).__name__}"
+            )
         if len(text) < MIN_CHARS:
-            raise TTSValidationError(f"Tekst za krótki ({len(text)} zn., min {MIN_CHARS})")
+            raise TTSValidationError(
+                f"Tekst za krótki ({len(text)} zn., min {MIN_CHARS})"
+            )
         if len(text) > MAX_CHARS:
-            raise TTSValidationError(f"Tekst za długi ({len(text)} zn., max {MAX_CHARS})")
+            raise TTSValidationError(
+                f"Tekst za długi ({len(text)} zn., max {MAX_CHARS})"
+            )
 
     async def _request_with_retry(
         self, text: str, voice_id: str, settings: VoiceSettings | None = None
@@ -471,7 +487,10 @@ class TTS:
                     if attempt < self._max_retries:
                         log.warning(
                             "HTTP %d — retry %d/%d, backoff %.0fs",
-                            resp.status_code, attempt, self._max_retries, wait,
+                            resp.status_code,
+                            attempt,
+                            self._max_retries,
+                            wait,
                         )
                         await asyncio.sleep(wait)
                         continue
@@ -479,7 +498,6 @@ class TTS:
                 resp.raise_for_status()
 
                 if len(resp.content) < MIN_AUDIO_BYTES:
-
                     raise TTSAPIError(
                         f"API zwróciło za mało danych ({len(resp.content)} B, min {MIN_AUDIO_BYTES})"
                     )
@@ -489,7 +507,12 @@ class TTS:
                 last_err = "timeout"
                 if attempt < self._max_retries:
                     wait = min(RETRY_BACKOFF_BASE * attempt, 5.0)
-                    log.warning("Timeout — retry %d/%d, backoff %.0fs", attempt, self._max_retries, wait)
+                    log.warning(
+                        "Timeout — retry %d/%d, backoff %.0fs",
+                        attempt,
+                        self._max_retries,
+                        wait,
+                    )
                     await asyncio.sleep(wait)
                     continue
 
@@ -526,13 +549,20 @@ class TTS:
                 (out_dir / fname).write_bytes(audio)
 
             return SynthResult(
-                index=index, text=text, audio=audio,
-                ok=True, elapsed=time.perf_counter() - t0,
+                index=index,
+                text=text,
+                audio=audio,
+                ok=True,
+                elapsed=time.perf_counter() - t0,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - any failure becomes a failed result
             return SynthResult(
-                index=index, text=text, audio=None,
-                ok=False, error=str(exc), elapsed=time.perf_counter() - t0,
+                index=index,
+                text=text,
+                audio=None,
+                ok=False,
+                error=str(exc),
+                elapsed=time.perf_counter() - t0,
             )
 
     @staticmethod
@@ -554,6 +584,7 @@ class TTS:
         """Konwertuj MP3 → target format via ffmpeg (bundled z imageio-ffmpeg)."""
         try:
             from imageio_ffmpeg import get_ffmpeg_exe  # type: ignore[import-not-found]
+
             ffmpeg = get_ffmpeg_exe()
         except ImportError:
             ffmpeg = shutil.which("ffmpeg")
@@ -571,8 +602,12 @@ class TTS:
         try:
             result = subprocess.run(
                 [
-                    ffmpeg, "-y", "-i", str(tmp_in_path),
-                    "-loglevel", "error",
+                    ffmpeg,
+                    "-y",
+                    "-i",
+                    str(tmp_in_path),
+                    "-loglevel",
+                    "error",
                     str(tmp_out_path),
                 ],
                 capture_output=True,
@@ -599,7 +634,8 @@ class TTS:
         if self._sync_loop is None or self._sync_loop.is_closed():
             self._sync_loop = asyncio.new_event_loop()
             self._sync_thread = threading.Thread(
-                target=self._sync_loop.run_forever, daemon=True,
+                target=self._sync_loop.run_forever,
+                daemon=True,
             )
             self._sync_thread.start()
         return self._sync_loop

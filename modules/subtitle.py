@@ -1,31 +1,31 @@
 """
-    The SubtitleRefactor class in this module provides various utilities for working with subtitle files.
+The SubtitleRefactor class in this module provides various utilities for working with subtitle files.
 
-    It can be used in different scenarios to perform tasks such as splitting ASS subtitle files, converting subtitles to different formats, and organizing files.
+It can be used in different scenarios to perform tasks such as splitting ASS subtitle files, converting subtitles to different formats, and organizing files.
 
-    * Example usage for splitting an ASS subtitle file based on styles:
-        subtitle_tool = SubtitleRefactor("sample_subtitle.ass")
-        subtitle_tool.split_ass()
+* Example usage for splitting an ASS subtitle file based on styles:
+    subtitle_tool = SubtitleRefactor("sample_subtitle.ass")
+    subtitle_tool.split_ass()
 
-    * Example usage for converting ASS subtitles to SRT format:
-        subtitle_tool = SubtitleRefactor("sample_subtitle.ass")
-        subtitle_tool.ass_to_srt()
+* Example usage for converting ASS subtitles to SRT format:
+    subtitle_tool = SubtitleRefactor("sample_subtitle.ass")
+    subtitle_tool.ass_to_srt()
 
-    * Example usage for moving an SRT subtitle file to a specified directory:
-        subtitle_tool = SubtitleRefactor("sample_subtitle.srt")
-        subtitle_tool.move_srt()
+* Example usage for moving an SRT subtitle file to a specified directory:
+    subtitle_tool = SubtitleRefactor("sample_subtitle.srt")
+    subtitle_tool.move_srt()
 
-    * Example usage for converting a text file to SRT format and performing other operations:
-        subtitle_tool = SubtitleRefactor("sample_text.txt")
-        subtitle_tool.txt_to_srt(400)
+* Example usage for converting a text file to SRT format and performing other operations:
+    subtitle_tool = SubtitleRefactor("sample_text.txt")
+    subtitle_tool.txt_to_srt(400)
 
-    * Example usage for converting numbers in an SRT subtitle file to their word equivalents in Polish:
-        subtitle_tool = SubtitleRefactor("sample_subtitle.srt")
-        subtitle_tool.convert_numbers_in_srt()
+* Example usage for converting numbers in an SRT subtitle file to their word equivalents in Polish:
+    subtitle_tool = SubtitleRefactor("sample_subtitle.srt")
+    subtitle_tool.convert_numbers_in_srt()
 
-    * Example usage for updating subtitles in an existing ASS file using translated subtitles from an SRT file:
-        subtitle_tool = SubtitleRefactor("sample_subtitle.srt")
-        subtitle_tool.srt_to_ass()
+* Example usage for updating subtitles in an existing ASS file using translated subtitles from an SRT file:
+    subtitle_tool = SubtitleRefactor("sample_subtitle.srt")
+    subtitle_tool.srt_to_ass()
 """
 
 import re
@@ -33,17 +33,17 @@ from contextlib import suppress
 from dataclasses import dataclass
 from os import makedirs, path, remove, stat
 from shutil import move
-from typing import List, Tuple
 
-from pysubs2 import load, SSAEvent, SSAFile
+from pysubs2 import SSAEvent, SSAFile, load
 
-from constants import (WORKING_SPACE,
-                       WORKING_SPACE_OUTPUT,
-                       WORKING_SPACE_TEMP,
-                       WORKING_SPACE_TEMP_MAIN_SUBS,
-                       WORKING_SPACE_TEMP_ALT_SUBS,
-                       console)
-
+from constants import (
+    WORKING_SPACE,
+    WORKING_SPACE_OUTPUT,
+    WORKING_SPACE_TEMP,
+    WORKING_SPACE_TEMP_ALT_SUBS,
+    WORKING_SPACE_TEMP_MAIN_SUBS,
+    console,
+)
 from utils.number_in_words import NumberInWords
 from utils.text_chunker import chunk_text
 
@@ -52,33 +52,34 @@ from utils.text_chunker import chunk_text
 # approach as modules/style_classifier.py).
 _BACKSLASH: str = chr(92)
 # Drawing-path commands such as "m 0 0 l 186 0" used to render vector shapes.
-_RE_DRAW_PATH: re.Pattern = re.compile(r'\b[mn] -?\d+')
+_RE_DRAW_PATH: re.Pattern = re.compile(r"\b[mn] -?\d+")
 # An ASS \p1-\p9 tag, which switches the line into vector-drawing mode. Two
 # chr(92) match one literal backslash in the regex (as in style_classifier.py).
-_RE_DRAW_TAG: re.Pattern = re.compile(_BACKSLASH + _BACKSLASH + r'p[1-9]')
+_RE_DRAW_TAG: re.Pattern = re.compile(_BACKSLASH + _BACKSLASH + r"p[1-9]")
 
 
 @dataclass(slots=True)
 class SubtitleRefactor:
     """
-        The SubtitleRefactor class is used for manipulating subtitle files. It provides functionalities such as splitting ASS subtitle files based on styles, converting ASS subtitles to SRT format, and moving SRT files to a specified directory.
+    The SubtitleRefactor class is used for manipulating subtitle files. It provides functionalities such as splitting ASS subtitle files based on styles, converting ASS subtitles to SRT format, and moving SRT files to a specified directory.
 
-        Attributes:
-            - filename (str): The name of the subtitle file to be processed.
-            - working_space (str, optional): The directory where the subtitle file is located.
-            - working_space_output (str, optional): The directory where the output files will be saved.
-            - working_space_temp (str, optional): The directory where temporary files will be saved during processing.
-            - working_space_temp_main_subs (str, optional): The directory for main subtitles during processing.
-            - working_space_temp_alt_subs (str, optional): The directory for alternate subtitles during processing.
+    Attributes:
+        - filename (str): The name of the subtitle file to be processed.
+        - working_space (str, optional): The directory where the subtitle file is located.
+        - working_space_output (str, optional): The directory where the output files will be saved.
+        - working_space_temp (str, optional): The directory where temporary files will be saved during processing.
+        - working_space_temp_main_subs (str, optional): The directory for main subtitles during processing.
+        - working_space_temp_alt_subs (str, optional): The directory for alternate subtitles during processing.
 
-        Methods:
-            - split_ass(self) -> None: Splits an ASS subtitle file into two files based on selected styles.
-            - ass_to_srt(self) -> None: Converts ASS subtitle files to SRT format.
-            - move_srt(self) -> None: Moves an SRT subtitle file to a specified directory.
-            - txt_to_srt(self, sentence_length: int) -> None: Converts a text file to SRT (SubRip Text) format.
-            - convert_numbers_in_srt(self) -> None: Converts numbers in an SRT subtitle file to their word equivalents in Polish.
-            - srt_to_ass(self) -> None: Updates subtitles in an existing ASS file using translated subtitles from an SRT file. If the ASS file does not exist, the SRT file is moved to the output directory, and its extension is changed to .ass. After these operations, the original ASS and SRT files are deleted.
+    Methods:
+        - split_ass(self) -> None: Splits an ASS subtitle file into two files based on selected styles.
+        - ass_to_srt(self) -> None: Converts ASS subtitle files to SRT format.
+        - move_srt(self) -> None: Moves an SRT subtitle file to a specified directory.
+        - txt_to_srt(self, sentence_length: int) -> None: Converts a text file to SRT (SubRip Text) format.
+        - convert_numbers_in_srt(self) -> None: Converts numbers in an SRT subtitle file to their word equivalents in Polish.
+        - srt_to_ass(self) -> None: Updates subtitles in an existing ASS file using translated subtitles from an SRT file. If the ASS file does not exist, the SRT file is moved to the output directory, and its extension is changed to .ass. After these operations, the original ASS and SRT files are deleted.
     """
+
     filename: str
     working_space: str = WORKING_SPACE
     working_space_output: str = WORKING_SPACE_OUTPUT
@@ -88,16 +89,16 @@ class SubtitleRefactor:
 
     def split_ass(self, auto_mode: bool = False) -> None:
         """
-            Splits an ASS subtitle file into two files based on selected styles.
+        Splits an ASS subtitle file into two files based on selected styles.
 
-            Args:
-                auto_mode: When True, dialogue styles are picked automatically by
-                    the classifier (modules.style_classifier) instead of manual
-                    selection. Defaults to False, keeping the interactive flow.
+        Args:
+            auto_mode: When True, dialogue styles are picked automatically by
+                the classifier (modules.style_classifier) instead of manual
+                selection. Defaults to False, keeping the interactive flow.
         """
         self._create_directories()
         subs: SSAFile = self._load_subs()
-        styles: List[str] = self._get_styles(subs)
+        styles: list[str] = self._get_styles(subs)
         if auto_mode:
             selected_styles = self._auto_select_styles(subs, styles)
         else:
@@ -107,16 +108,14 @@ class SubtitleRefactor:
             self._move_subs_to_main()
             return
         main_subs, alt_subs = self._split_subs(subs, selected_styles)
-        self._copy_metadata_and_styles(
-            subs, main_subs, alt_subs, selected_styles)
+        self._copy_metadata_and_styles(subs, main_subs, alt_subs, selected_styles)
         self._save_subs(main_subs, alt_subs, subs, selected_styles)
         self._remove_source_file()
-        console.print("Podział napisów zakończony pomyślnie.",
-                      style='green_bold')
+        console.print("Podział napisów zakończony pomyślnie.", style="green_bold")
 
     def _create_directories(self) -> None:
         """
-            Creates directories if they do not exist.
+        Creates directories if they do not exist.
         """
         if not path.exists(self.working_space_temp_main_subs):
             makedirs(self.working_space_temp_main_subs, exist_ok=True)
@@ -125,41 +124,47 @@ class SubtitleRefactor:
 
     def _load_subs(self) -> SSAFile:
         """
-            Loads the subtitle file.
+        Loads the subtitle file.
         """
-        with open(path.join(self.working_space_temp, self.filename), 'r', encoding='utf-8') as file:
+        with open(
+            path.join(self.working_space_temp, self.filename), "r", encoding="utf-8"
+        ) as file:
             return SSAFile.from_file(file)
 
-    def _get_styles(self, subs: SSAFile) -> List[str]:
+    def _get_styles(self, subs: SSAFile) -> list[str]:
         """
-            Returns a list of styles in the subtitle file.
+        Returns a list of styles in the subtitle file.
         """
-        styles: List[str] = []
+        styles: list[str] = []
         for event in subs:
             if event.style not in styles:
                 styles.append(event.style)
         return styles
 
-    def _display_styles(self, styles: List[str]) -> None:
+    def _display_styles(self, styles: list[str]) -> None:
         """
-            Displays the styles to the user.
+        Displays the styles to the user.
         """
-        console.print("PODZIAŁ PLIKU:", style='yellow_bold')
-        console.print(self.filename, style='white_bold')
-        console.print("Dostępne style do TTS:", style='yellow_bold')
+        console.print("PODZIAŁ PLIKU:", style="yellow_bold")
+        console.print(self.filename, style="white_bold")
+        console.print("Dostępne style do TTS:", style="yellow_bold")
         for i, style in enumerate(styles, start=1):
             console.print(
-                f"[yellow_bold]{i}.[/yellow_bold] {style}", style='white_bold')
+                f"[yellow_bold]{i}.[/yellow_bold] {style}", style="white_bold"
+            )
 
-    def _select_styles(self, styles: List[str]) -> List[str]:
+    def _select_styles(self, styles: list[str]) -> list[str]:
         """
-            Prompts the user to select styles and returns a list of selected styles.
+        Prompts the user to select styles and returns a list of selected styles.
         """
-        selected_styles: List[str] = []
+        selected_styles: list[str] = []
         while True:
-            console.print("Wybierz style do zapisu (naciśnij ENTER, aby zakończyć):",
-                          style='green_bold', end=" ")
-            selection: str = input('')
+            console.print(
+                "Wybierz style do zapisu (naciśnij ENTER, aby zakończyć):",
+                style="green_bold",
+                end=" ",
+            )
+            selection: str = input("")
             if not selection:
                 break
             with suppress(ValueError):
@@ -168,63 +173,70 @@ class SubtitleRefactor:
                     selected_styles.append(styles[selected_index])
         return selected_styles
 
-    def _auto_select_styles(self, subs: SSAFile, styles: List[str]) -> List[str]:
+    def _auto_select_styles(self, subs: SSAFile, styles: list[str]) -> list[str]:
         """
-            Automatically selects dialogue styles using the style classifier.
+        Automatically selects dialogue styles using the style classifier.
 
-            Prints a dry-run summary (which styles go to the narrator vs are skipped)
-            so the user can verify the split. Styles classified UNCERTAIN are kept as
-            dialogue — the user prefers to hear a line than to miss it.
+        Prints a dry-run summary (which styles go to the narrator vs are skipped)
+        so the user can verify the split. Styles classified UNCERTAIN are kept as
+        dialogue — the user prefers to hear a line than to miss it.
 
-            Args:
-                subs: The loaded subtitle file.
-                styles: The list of style names present in the file.
+        Args:
+            subs: The loaded subtitle file.
+            styles: The list of style names present in the file.
 
-            Returns:
-                The list of style names to read aloud (DIALOG + UNCERTAIN).
+        Returns:
+            The list of style names to read aloud (DIALOG + UNCERTAIN).
         """
         from modules.style_classifier import Category, classify_styles
 
-        console.print("PODZIAŁ AUTOMATYCZNY:", style='yellow_bold')
-        console.print(self.filename, style='white_bold')
+        console.print("PODZIAŁ AUTOMATYCZNY:", style="yellow_bold")
+        console.print(self.filename, style="white_bold")
 
         verdicts = classify_styles(subs)
-        icon = {Category.DIALOG: '🗣️', Category.SIGN: '🔇',
-                Category.UNCERTAIN: '❓'}
-        selected: List[str] = []
+        icon = {Category.DIALOG: "🗣️", Category.SIGN: "🔇", Category.UNCERTAIN: "❓"}
+        selected: list[str] = []
         for v in verdicts:
             mark = icon[v.category]
             read = v.category in (Category.DIALOG, Category.UNCERTAIN)
             if read:
                 selected.append(v.style)
-            dup_note = (f", animacja {v.raw_line_count}->{v.line_count}"
-                        if v.raw_line_count > v.line_count else "")
+            dup_note = (
+                f", animacja {v.raw_line_count}->{v.line_count}"
+                if v.raw_line_count > v.line_count
+                else ""
+            )
             console.print(
                 f"  {mark} {v.style} — {v.category.value} "
                 f"(pewność {v.confidence:.0%}, {v.line_count} linii{dup_note})",
-                style='white_bold')
+                style="white_bold",
+            )
 
         if selected:
-            console.print("Lektor przeczyta style:", style='green_bold', end=' ')
-            console.print(", ".join(selected), style='white_bold')
+            console.print("Lektor przeczyta style:", style="green_bold", end=" ")
+            console.print(", ".join(selected), style="white_bold")
         return selected
 
     def _move_subs_to_main(self) -> None:
         """
-            Moves the subtitle file to the main_subs directory.
+        Moves the subtitle file to the main_subs directory.
         """
-        console.print("Nie wybrano żadnych stylów. Przeniesiono napisów do main_subs.",
-                      style='red_bold')
+        console.print(
+            "Nie wybrano żadnych stylów. Przeniesiono napisów do main_subs.",
+            style="red_bold",
+        )
         makedirs(self.working_space_temp_main_subs, exist_ok=True)
-        alt_file_path: str = path.join(
-            self.working_space_temp, self.filename)
+        alt_file_path: str = path.join(self.working_space_temp, self.filename)
         main_file_path: str = path.join(
-            self.working_space_temp_main_subs, self.filename)
+            self.working_space_temp_main_subs, self.filename
+        )
         move(alt_file_path, main_file_path)
 
-    def _split_subs(self, subs: SSAFile, selected_styles: List[str]) -> Tuple[SSAFile, SSAFile]:
+    def _split_subs(
+        self, subs: SSAFile, selected_styles: list[str]
+    ) -> tuple[SSAFile, SSAFile]:
         """
-            Splits the subtitle file into two files based on the selected styles.
+        Splits the subtitle file into two files based on the selected styles.
         """
         main_subs: SSAFile = SSAFile()
         alt_subs: SSAFile = SSAFile()
@@ -237,67 +249,88 @@ class SubtitleRefactor:
 
         return main_subs, alt_subs
 
-    def _copy_metadata_and_styles(self, subs: SSAFile, main_subs: SSAFile, alt_subs: SSAFile, selected_styles: List[str]) -> None:
+    def _copy_metadata_and_styles(
+        self,
+        subs: SSAFile,
+        main_subs: SSAFile,
+        alt_subs: SSAFile,
+        selected_styles: list[str],
+    ) -> None:
         """
-            Copies metadata and styles to the output files.
+        Copies metadata and styles to the output files.
         """
         main_subs.info = subs.info
         alt_subs.info = subs.info
 
-        main_style_names: List[str] = [style_name for style_name in subs.styles.keys()
-                                       if style_name in selected_styles]
+        main_style_names: list[str] = [
+            style_name for style_name in subs.styles if style_name in selected_styles
+        ]
         main_subs.styles.clear()
         for style_name in main_style_names:
             main_subs.styles[style_name] = subs.styles[style_name]
 
-        alt_style_names: List[str] = [style_name for style_name in subs.styles.keys()
-                                      if style_name not in selected_styles]
+        alt_style_names: list[str] = [
+            style_name
+            for style_name in subs.styles
+            if style_name not in selected_styles
+        ]
         alt_subs.styles.clear()
         for style_name in alt_style_names:
             alt_subs.styles[style_name] = subs.styles[style_name]
 
-    def _save_subs(self, main_subs: SSAFile, alt_subs: SSAFile, subs: SSAFile, selected_styles: List[str]) -> None:
+    def _save_subs(
+        self,
+        main_subs: SSAFile,
+        alt_subs: SSAFile,
+        subs: SSAFile,
+        selected_styles: list[str],
+    ) -> None:
         """
-            Saves the split subtitle files.
+        Saves the split subtitle files.
         """
         main_output_file: str = path.join(
-            self.working_space_temp_main_subs, self.filename)
+            self.working_space_temp_main_subs, self.filename
+        )
         alt_output_file: str = path.join(
-            self.working_space_temp_alt_subs, self.filename)
+            self.working_space_temp_alt_subs, self.filename
+        )
 
         main_subs.info = subs.info
         alt_subs.info = subs.info
 
-        main_style_names: List[str] = [style_name for style_name in subs.styles.keys()
-                                       if style_name in selected_styles]
+        main_style_names: list[str] = [
+            style_name for style_name in subs.styles if style_name in selected_styles
+        ]
         main_subs.styles.clear()
         for style_name in main_style_names:
             main_subs.styles[style_name] = subs.styles[style_name]
 
-        alt_style_names: List[str] = [style_name for style_name in subs.styles.keys()
-                                      if style_name not in selected_styles]
+        alt_style_names: list[str] = [
+            style_name
+            for style_name in subs.styles
+            if style_name not in selected_styles
+        ]
         alt_subs.styles.clear()
         for style_name in alt_style_names:
             alt_subs.styles[style_name] = subs.styles[style_name]
 
-        with open(main_output_file, 'w', encoding='utf-8') as main_file:
-            main_file.write(main_subs.to_string(format_='ass'))
+        with open(main_output_file, "w", encoding="utf-8") as main_file:
+            main_file.write(main_subs.to_string(format_="ass"))
 
-        with open(alt_output_file, 'w', encoding='utf-8') as alt_file:
-            alt_file.write(alt_subs.to_string(format_='ass'))
+        with open(alt_output_file, "w", encoding="utf-8") as alt_file:
+            alt_file.write(alt_subs.to_string(format_="ass"))
 
     def _remove_source_file(self) -> None:
         """
-            Removes the source subtitle file.
+        Removes the source subtitle file.
         """
         remove(path.join(self.working_space_temp, self.filename))
 
     def ass_to_srt(self) -> None:
         """
-            Converts ASS subtitle files to SRT format and removes HTML tags.
+        Converts ASS subtitle files to SRT format and removes HTML tags.
         """
-        folders = [self.working_space_temp_main_subs,
-                   self.working_space_temp_alt_subs]
+        folders = [self.working_space_temp_main_subs, self.working_space_temp_alt_subs]
         for folder in folders:
             file_path: str = path.join(folder, self.filename)
 
@@ -310,39 +343,44 @@ class SubtitleRefactor:
             for i, sub in enumerate(ass_subs):
                 srt_subs.insert(i, sub)
 
-            srt_content = srt_subs.to_string(format_='srt')
-            srt_content = re.sub(r'<.*?>', '', srt_content)
+            srt_content = srt_subs.to_string(format_="srt")
+            srt_content = re.sub(r"<.*?>", "", srt_content)
 
-            with open(file_path.replace('.ass', '.srt'), 'w', encoding='utf-8') as file:
+            with open(file_path.replace(".ass", ".srt"), "w", encoding="utf-8") as file:
                 file.write(srt_content)
 
         console.print()
 
     def move_srt(self) -> None:
         """
-            Moves an SRT subtitle file to a specified directory and removes HTML tags.
+        Moves an SRT subtitle file to a specified directory and removes HTML tags.
         """
         target_file_path: str = path.join(
-            self.working_space_temp_main_subs, self.filename)
+            self.working_space_temp_main_subs, self.filename
+        )
 
         if not path.exists(self.working_space_temp_main_subs):
             makedirs(self.working_space_temp_main_subs, exist_ok=True)
 
-        source_file_path: str = path.join(
-            self.working_space_temp, self.filename)
+        source_file_path: str = path.join(self.working_space_temp, self.filename)
 
-        with open(source_file_path, 'r', encoding='utf-8') as file:
+        with open(source_file_path, "r", encoding="utf-8") as file:
             file_content = file.read()
 
-        file_content = re.sub(r'{\\an\d+}', '', file_content)
+        file_content = re.sub(r"{\\an\d+}", "", file_content)
 
-        with open(target_file_path, 'w', encoding='utf-8') as file:
+        with open(target_file_path, "w", encoding="utf-8") as file:
             file.write(file_content)
 
         remove(source_file_path)
 
     # TODO: dodać deklaracje typów i zmowyfikowac instrukcjie na górze itp.
-    def txt_to_srt(self, chunk_limit: int = 750, sentence_length: int = 0, split_method: str = 'word') -> None:
+    def txt_to_srt(
+        self,
+        chunk_limit: int = 750,
+        sentence_length: int = 0,
+        split_method: str = "word",
+    ) -> None:
         """
         Converts a text file to SRT (SubRip Text) format.
 
@@ -354,19 +392,18 @@ class SubtitleRefactor:
             split_method (str): The method to use for splitting the text ('word' or 'char').
         """
         txt_file_path: str = path.join(self.working_space_temp, self.filename)
-        srt_file_path: str = txt_file_path.replace('.txt', '.srt')
+        srt_file_path: str = txt_file_path.replace(".txt", ".srt")
 
-        with open(txt_file_path, 'r', encoding='utf-8') as file:
+        with open(txt_file_path, "r", encoding="utf-8") as file:
             text: str = file.read()
 
         # Usuń podwójne nowe linie i zamień je na pojedyncze spacje
-        text = text.replace('\n\n', '\n').replace('\n', ' ')
+        text = text.replace("\n\n", "\n").replace("\n", " ")
 
-        text = re.sub(r'\s+\.', '.', text)
+        text = re.sub(r"\s+\.", ".", text)
 
         # Podziel tekst na początkowe chunki zgodnie z wybraną metodą
-        initial_chunks = chunk_text(
-            text, method=split_method, limit=chunk_limit)
+        initial_chunks = chunk_text(text, method=split_method, limit=chunk_limit)
 
         if sentence_length == 0:
             captions = initial_chunks
@@ -388,7 +425,8 @@ class SubtitleRefactor:
                 else:
                     # Dzielenie zbyt długich chunków na mniejsze części, zależnie od metody
                     sub_chunks = chunk_text(
-                        chunk, method=split_method, limit=sentence_length // 2)
+                        chunk, method=split_method, limit=sentence_length // 2
+                    )
                     for sub_chunk in sub_chunks:
                         add_chunk_to_caption(sub_chunk)
 
@@ -401,21 +439,20 @@ class SubtitleRefactor:
             event = SSAEvent(start=0, end=0, text=caption.strip())
             subs.append(event)
 
-        with open(srt_file_path, 'w', encoding='utf-8') as file:
-            file.write(subs.to_string(format_='srt'))
+        with open(srt_file_path, "w", encoding="utf-8") as file:
+            file.write(subs.to_string(format_="srt"))
 
         remove(txt_file_path)
-        self.filename = self.filename.replace('.txt', '.srt')
+        self.filename = self.filename.replace(".txt", ".srt")
         self.move_srt()
 
     def convert_numbers_in_srt(self) -> None:
         """
-            Converts numbers in an SRT subtitle file to their word equivalents in Polish.
+        Converts numbers in an SRT subtitle file to their word equivalents in Polish.
         """
-        srt_file_path: str = path.join(
-            self.working_space_temp_main_subs, self.filename)
+        srt_file_path: str = path.join(self.working_space_temp_main_subs, self.filename)
 
-        subs = load(srt_file_path, encoding='utf-8')
+        subs = load(srt_file_path, encoding="utf-8")
 
         number_in_words = NumberInWords()
         for i, sub in enumerate(subs):
@@ -423,42 +460,44 @@ class SubtitleRefactor:
                 sub.text = number_in_words.convert_numbers_in_text(sub.text)
             except IndexError:
                 console.print(
-                    f"[red_bold]Wystąpił błąd w napisie {i+1}:[/red_bold] {sub.text}.\n[red_bold]Pomijam ten napis.", style='white_bold')
+                    f"[red_bold]Wystąpił błąd w napisie {i + 1}:[/red_bold] {sub.text}.\n[red_bold]Pomijam ten napis.",
+                    style="white_bold",
+                )
 
         subs.save(srt_file_path)
 
-        console.print(
-            "\nPrzekonwertowano liczby na słowa:", style='green_bold')
-        console.print(srt_file_path, '\n', style='white_bold')
+        console.print("\nPrzekonwertowano liczby na słowa:", style="green_bold")
+        console.print(srt_file_path, "\n", style="white_bold")
 
     @staticmethod
     def _is_vector_drawing(text: str) -> bool:
         """
-            Returns True if an ASS event holds a vector drawing rather than text.
+        Returns True if an ASS event holds a vector drawing rather than text.
 
-            Drawings carry no translation, so they must be skipped when merging
-            the translated SRT back in. They are identified either by a drawing
-            command in the body (e.g. "m 0 0 l 186 0") or by a \\p1-\\p9 tag.
+        Drawings carry no translation, so they must be skipped when merging
+        the translated SRT back in. They are identified either by a drawing
+        command in the body (e.g. "m 0 0 l 186 0") or by a \\p1-\\p9 tag.
         """
         return bool(_RE_DRAW_PATH.search(text) or _RE_DRAW_TAG.search(text))
 
     def srt_to_ass(self) -> None:
         """
-            This method updates the subtitles in an existing ASS file using the translated subtitles from an SRT file.
-            If the ASS file does not exist, the SRT file is moved to the output directory.
-            After these operations, the original ASS and SRT files are deleted.
+        This method updates the subtitles in an existing ASS file using the translated subtitles from an SRT file.
+        If the ASS file does not exist, the SRT file is moved to the output directory.
+        After these operations, the original ASS and SRT files are deleted.
         """
-        srt_file_path: str = path.join(
-            self.working_space_temp_alt_subs, self.filename)
+        srt_file_path: str = path.join(self.working_space_temp_alt_subs, self.filename)
         ass_file_path: str = path.join(
-            self.working_space_temp_alt_subs, self.filename.replace('.srt', '.ass'))
+            self.working_space_temp_alt_subs, self.filename.replace(".srt", ".ass")
+        )
         output_file_path: str = path.join(
-            self.working_space_output, self.filename.replace('.srt', '.ass'))
+            self.working_space_output, self.filename.replace(".srt", ".ass")
+        )
 
         if stat(srt_file_path).st_size == 0:
             return
 
-        srt_subs = load(srt_file_path, encoding='utf-8')
+        srt_subs = load(srt_file_path, encoding="utf-8")
 
         if path.exists(ass_file_path):
             ass_subs = SSAFile.load(ass_file_path)
@@ -468,10 +507,11 @@ class SubtitleRefactor:
             # lines ass_to_srt added/skipped. The same (start, end) can repeat
             # (e.g. a drawing and a caption at one timestamp), so each key holds
             # a queue of translations consumed in order.
-            translations_by_time: dict[Tuple[int, int], List[str]] = {}
+            translations_by_time: dict[tuple[int, int], list[str]] = {}
             for sub in srt_subs:
-                translations_by_time.setdefault(
-                    (sub.start, sub.end), []).append(sub.text)
+                translations_by_time.setdefault((sub.start, sub.end), []).append(
+                    sub.text
+                )
 
             for event in ass_subs.events:
                 if event.type != "Dialogue":
@@ -480,29 +520,30 @@ class SubtitleRefactor:
                 # 0" or a \p1-\p9 drawing tag); they have no translation.
                 if self._is_vector_drawing(event.text):
                     continue
-                translations = translations_by_time.get(
-                    (event.start, event.end))
+                translations = translations_by_time.get((event.start, event.end))
                 if not translations:
                     # Timing not found -> leave the original event untouched.
                     continue
-                srt_lines: List[str] = translations.pop(0).split('\n')
+                srt_lines: list[str] = translations.pop(0).split("\n")
                 # Preserve the leading ASS tags (everything up to and including
                 # the last '}', e.g. {\pos(...)}) and append the translation.
-                last_brace_position: int = event.text.rfind('}')
+                last_brace_position: int = event.text.rfind("}")
                 if last_brace_position != -1:
-                    event.text = event.text[:last_brace_position +
-                                            1] + '\n'.join(srt_lines)
+                    event.text = event.text[: last_brace_position + 1] + "\n".join(
+                        srt_lines
+                    )
                 else:
-                    event.text = '\n'.join(srt_lines)
+                    event.text = "\n".join(srt_lines)
             ass_subs.save(output_file_path)
         else:
-            srt_subs = load(srt_file_path, encoding='utf-8')
+            srt_subs = load(srt_file_path, encoding="utf-8")
             ass_subs = SSAFile()
             for i, sub in enumerate(srt_subs):
-                ass_subs.insert(i, SSAEvent(start=sub.start,
-                                end=sub.end, text=sub.text))
+                ass_subs.insert(
+                    i, SSAEvent(start=sub.start, end=sub.end, text=sub.text)
+                )
             ass_subs.save(output_file_path)
-            output_file_path = output_file_path.replace('.srt', '.ass')
+            output_file_path = output_file_path.replace(".srt", ".ass")
             move(srt_file_path, output_file_path)
 
         console.print("Przeniesiono alternatywne napisy:", style="green_bold")

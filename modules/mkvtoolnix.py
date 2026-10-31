@@ -1,36 +1,38 @@
 """
-    The MkvToolNix module provides a class for manipulating MKV files. It uses tools from the MKVToolNix package such as mkvextract, mkvmerge, and mkvinfo.
+The MkvToolNix module provides a class for manipulating MKV files. It uses tools from the MKVToolNix package such as mkvextract, mkvmerge, and mkvinfo.
 
-    * Example usage:
-        mkvtoolnix = MkvToolNix(filename='example.mkv')
-        mkv_info = mkvtoolnix.get_mkv_info()
-        mkvtoolnix.mkv_extract_track(mkv_info)
+* Example usage:
+    mkvtoolnix = MkvToolNix(filename='example.mkv')
+    mkv_info = mkvtoolnix.get_mkv_info()
+    mkvtoolnix.mkv_extract_track(mkv_info)
 
-    * Example output from get_mkv_info():
-        {
-            "container": {...},
-            "global_tags": [...],
-            "tracks": [...],
-            "chapters": [...],
-            "attachments": [...]
-        }
+* Example output from get_mkv_info():
+    {
+        "container": {...},
+        "global_tags": [...],
+        "tracks": [...],
+        "chapters": [...],
+        "attachments": [...]
+    }
 """
 
 import sys
-from subprocess import Popen, PIPE, CalledProcessError
-from json import loads
-from typing import Any, Dict, List, Set
-from os import path, stat
 from dataclasses import dataclass
+from json import loads
+from os import path, stat
+from subprocess import PIPE, CalledProcessError, Popen
+from typing import Any
 
-from constants import (WORKING_SPACE,
-                       WORKING_SPACE_OUTPUT,
-                       WORKING_SPACE_TEMP,
-                       MKV_EXTRACT_PATH,
-                       MKV_MERGE_PATH, MKV_INFO_PATH,
-                       MKV_PROPEDIT_PATH,
-                       console)
-
+from constants import (
+    MKV_EXTRACT_PATH,
+    MKV_INFO_PATH,
+    MKV_MERGE_PATH,
+    MKV_PROPEDIT_PATH,
+    WORKING_SPACE,
+    WORKING_SPACE_OUTPUT,
+    WORKING_SPACE_TEMP,
+    console,
+)
 from modules.track_selector import select_audio_track, select_subtitle_track
 
 # Below this size an extracted track is treated as incomplete/garbage, so the
@@ -41,22 +43,23 @@ MIN_EXTRACTED_BYTES: int = 1024
 @dataclass(slots=True)
 class MkvToolNix:
     """
-        A class for manipulating MKV files using the MKVToolNix package.
+    A class for manipulating MKV files using the MKVToolNix package.
 
-        Attributes:
-            - filename (str): The name of the MKV file to be processed.
-            - working_space (str): The directory where the MKV file is located.
-            - working_space_output (str): The directory where the output files will be saved.
-            - working_space_temp (str): The directory where temporary files will be saved during processing.
-            - mkv_extract_path (str): The path to the mkvextract executable.
-            - mkv_merge_path (str): The path to the mkvmerge executable.
-            - mkv_info_path (str): The path to the mkvinfo executable.
-            - mkv_propedit_path (str): The path to the mkvpropedit executable.
+    Attributes:
+        - filename (str): The name of the MKV file to be processed.
+        - working_space (str): The directory where the MKV file is located.
+        - working_space_output (str): The directory where the output files will be saved.
+        - working_space_temp (str): The directory where temporary files will be saved during processing.
+        - mkv_extract_path (str): The path to the mkvextract executable.
+        - mkv_merge_path (str): The path to the mkvmerge executable.
+        - mkv_info_path (str): The path to the mkvinfo executable.
+        - mkv_propedit_path (str): The path to the mkvpropedit executable.
 
-        Methods:
-            - get_mkv_info(): Retrieves information about the MKV file using the mkvinfo tool.
-            - mkv_extract_track(data: Dict[str, Any]): Extracts the specified tracks from the MKV file using the mkvextract tool.
+    Methods:
+        - get_mkv_info(): Retrieves information about the MKV file using the mkvinfo tool.
+        - mkv_extract_track(data: Dict[str, Any]): Extracts the specified tracks from the MKV file using the mkvextract tool.
     """
+
     filename: str
     working_space: str = WORKING_SPACE
     working_space_output: str = WORKING_SPACE_OUTPUT
@@ -70,98 +73,106 @@ class MkvToolNix:
 
     def _check_executables(self) -> None:
         """
-            Checks if the MKVToolNix executables exist at the specified paths.
-            If any executable is not found, the program will exit with an error message.
+        Checks if the MKVToolNix executables exist at the specified paths.
+        If any executable is not found, the program will exit with an error message.
         """
-        executables: List[str] = [self.mkv_extract_path,
-                                  self.mkv_merge_path, self.mkv_info_path]
+        executables: list[str] = [
+            self.mkv_extract_path,
+            self.mkv_merge_path,
+            self.mkv_info_path,
+        ]
         for executable in executables:
             if not path.exists(executable):
-                console.print(
-                    f'Error: {executable} not found.', style='red_bold')
+                console.print(f"Error: {executable} not found.", style="red_bold")
                 sys.exit()
 
     def get_mkv_info(self) -> dict:
         """
-            Retrieves information about the MKV file using the mkvinfo tool.
-            The information is returned as a dictionary and also printed to the console.
-            If an error occurs during the process, the program will exit with an error message.
+        Retrieves information about the MKV file using the mkvinfo tool.
+        The information is returned as a dictionary and also printed to the console.
+        If an error occurs during the process, the program will exit with an error message.
 
-            Returns:
-            - dict: A dictionary containing information about the MKV file.
+        Returns:
+        - dict: A dictionary containing information about the MKV file.
         """
         try:
             self._check_executables()
-            command: List[str] = self._get_mkv_info_command()
-            with Popen(command, stdout=PIPE, stderr=PIPE, universal_newlines=True, encoding='utf-8') as process:
+            command: list[str] = self._get_mkv_info_command()
+            with Popen(
+                command,
+                stdout=PIPE,
+                stderr=PIPE,
+                universal_newlines=True,
+                encoding="utf-8",
+            ) as process:
                 output, error = process.communicate()
 
                 if process.returncode == 0:
                     data: dict = loads(output)
-                    tracks_data: List[dict] = self._parse_tracks_data(data)
+                    tracks_data: list[dict] = self._parse_tracks_data(data)
                     self._print_mkv_info(tracks_data)
                     return data
 
-                console.print(f'Error: {error}', style='red_bold')
+                console.print(f"Error: {error}", style="red_bold")
         except (FileNotFoundError, CalledProcessError) as error:
-            console.print(f'Error: {error}', style='red_bold')
+            console.print(f"Error: {error}", style="red_bold")
             sys.exit()
         return {}
 
-    def _get_mkv_info_command(self) -> List[str]:
+    def _get_mkv_info_command(self) -> list[str]:
         """
-            Constructs the command to be used for retrieving information about the MKV file with mkvinfo.
+        Constructs the command to be used for retrieving information about the MKV file with mkvinfo.
 
-            Returns:
-                - List[str]: A list of strings representing the command to be executed.
+        Returns:
+            - List[str]: A list of strings representing the command to be executed.
         """
         return [
             self.mkv_merge_path,
-            '--ui-language',
-            'en',
-            '--identify',
-            '--identification-format',
-            'json',
-            path.join(self.working_space, self.filename)
+            "--ui-language",
+            "en",
+            "--identify",
+            "--identification-format",
+            "json",
+            path.join(self.working_space, self.filename),
         ]
 
-    def _parse_tracks_data(self, data: dict) -> List[dict]:
+    def _parse_tracks_data(self, data: dict) -> list[dict]:
         """
-            Parses the track data from the dictionary returned by mkvinfo.
+        Parses the track data from the dictionary returned by mkvinfo.
 
-            Args:
-                - data (dict): A dictionary containing information about the MKV file.
+        Args:
+            - data (dict): A dictionary containing information about the MKV file.
 
-            Returns:
-                - List[dict]: A list of dictionaries, each representing a track in the MKV file.
+        Returns:
+            - List[dict]: A list of dictionaries, each representing a track in the MKV file.
         """
-        tracks_data: List[dict] = []
+        tracks_data: list[dict] = []
 
-        for track in data['tracks']:
+        for track in data["tracks"]:
             track_data: dict = self._parse_track_data(track)
             tracks_data.append(track_data)
 
-        return sorted(tracks_data, key=lambda x: x['id'])
+        return sorted(tracks_data, key=lambda x: x["id"])
 
     def _parse_track_data(self, track: dict) -> dict:
         """
-            Parses the data for a single track from the dictionary returned by mkvinfo.
-            Returns a dictionary with the track's ID, type, codec ID, language, IETF language, and properties.
+        Parses the data for a single track from the dictionary returned by mkvinfo.
+        Returns a dictionary with the track's ID, type, codec ID, language, IETF language, and properties.
 
-            Args:
-                - track (dict): A dictionary containing information about a single track in the MKV file.
+        Args:
+            - track (dict): A dictionary containing information about a single track in the MKV file.
 
-            Returns:
-                - dict: A dictionary containing information about a single track in the MKV file.
+        Returns:
+            - dict: A dictionary containing information about a single track in the MKV file.
         """
-        properties = track['properties']
+        properties = track["properties"]
         track_data: dict = {
-            'id': track['id'],
-            'type': track['type'],
-            'codec_id': properties.get('codec_id', ''),
-            'language': properties.get('language', ''),
-            'language_ietf': properties.get('language_ietf', ''),
-            'properties': self._get_track_properties(properties)
+            "id": track["id"],
+            "type": track["type"],
+            "codec_id": properties.get("codec_id", ""),
+            "language": properties.get("language", ""),
+            "language_ietf": properties.get("language_ietf", ""),
+            "properties": self._get_track_properties(properties),
         }
 
         return track_data
@@ -169,118 +180,125 @@ class MkvToolNix:
     @staticmethod
     def _get_track_properties(properties: dict) -> str:
         """
-            Retrieves the properties of a track from the dictionary returned by mkvinfo.
+        Retrieves the properties of a track from the dictionary returned by mkvinfo.
 
-            Args:
-                - properties (dict): A dictionary containing the properties of a track in the MKV file.
+        Args:
+            - properties (dict): A dictionary containing the properties of a track in the MKV file.
 
-            Returns:
-                - str: A string containing the properties of a track in the MKV file.
+        Returns:
+            - str: A string containing the properties of a track in the MKV file.
         """
-        if 'display_dimensions' in properties:
-            return properties['display_dimensions']
-        if 'audio_sampling_frequency' in properties:
+        if "display_dimensions" in properties:
+            return properties["display_dimensions"]
+        if "audio_sampling_frequency" in properties:
             return f"{properties['audio_sampling_frequency']} Hz"
-        return 'None'
+        return "None"
 
-    def _print_mkv_info(self, tracks_data: List[dict]) -> None:
+    def _print_mkv_info(self, tracks_data: list[dict]) -> None:
         """
-            Prints the information about the MKV file to the console.
-            The information includes the ID, type, codec ID, language, IETF language, and properties of each track.
+        Prints the information about the MKV file to the console.
+        The information includes the ID, type, codec ID, language, IETF language, and properties of each track.
 
-            Args:
-                - tracks_data (List[dict]): A list of dictionaries, each representing a track in the MKV file.
+        Args:
+            - tracks_data (List[dict]): A list of dictionaries, each representing a track in the MKV file.
         """
-        console.print('WYODRĘBNIANIE Z PLIKU:',
-                      style='yellow_bold')
-        console.print(self.filename, style='white_bold')
-        console.print('ID  TYPE        CODEK                LANG  LANG_IETF  PROPERTIES',
-                      style='yellow_bold')
+        console.print("WYODRĘBNIANIE Z PLIKU:", style="yellow_bold")
+        console.print(self.filename, style="white_bold")
+        console.print(
+            "ID  TYPE        CODEK                LANG  LANG_IETF  PROPERTIES",
+            style="yellow_bold",
+        )
 
         for track in tracks_data:
             console.print(
-                f'[yellow_bold]{track["id"]:2}[/yellow_bold]  '
-                f'[white_bold]{track["type"]:10}  '
-                f'{track["codec_id"]:20} '
-                f'{track["language"]:5} '
-                f'{track["language_ietf"]:10} '
-                f'{track["properties"]}'
+                f"[yellow_bold]{track['id']:2}[/yellow_bold]  "
+                f"[white_bold]{track['type']:10}  "
+                f"{track['codec_id']:20} "
+                f"{track['language']:5} "
+                f"{track['language_ietf']:10} "
+                f"{track['properties']}"
             )
         console.print()
 
-    def mkv_extract_track(self, data: Dict[str, Any], auto_mode: bool = False) -> None:
+    def mkv_extract_track(self, data: dict[str, Any], auto_mode: bool = False) -> None:
         """
-            Extracts the specified tracks from the MKV file using the mkvextract tool.
+        Extracts the specified tracks from the MKV file using the mkvextract tool.
 
-            In manual mode the user is prompted to enter the IDs of the tracks to
-            extract. In auto mode the original audio track and the source subtitle
-            track are picked automatically from the MKV metadata (see
-            modules.track_selector) and the decision is logged, with no prompt.
-            If an error occurs during the process, the program will exit with an
-            error message.
+        In manual mode the user is prompted to enter the IDs of the tracks to
+        extract. In auto mode the original audio track and the source subtitle
+        track are picked automatically from the MKV metadata (see
+        modules.track_selector) and the decision is logged, with no prompt.
+        If an error occurs during the process, the program will exit with an
+        error message.
 
-            Args:
-                - data (Dict[str, Any]): A dictionary containing information about the MKV file.
-                - auto_mode (bool): When True, pick the audio and subtitle tracks
-                    automatically instead of asking the user. Defaults to False.
+        Args:
+            - data (Dict[str, Any]): A dictionary containing information about the MKV file.
+            - auto_mode (bool): When True, pick the audio and subtitle tracks
+                automatically instead of asking the user. Defaults to False.
         """
         if auto_mode:
-            tracks_to_extract: Set[int] = self._auto_select_tracks(data)
+            tracks_to_extract: set[int] = self._auto_select_tracks(data)
         else:
             tracks_to_extract = self._prompt_tracks_to_extract(data)
 
         try:
             for track_id in tracks_to_extract:
-                track: Dict[str, Any] = data['tracks'][track_id]
-                codec_id: str = track['properties']['codec_id']
+                track: dict[str, Any] = data["tracks"][track_id]
+                codec_id: str = track["properties"]["codec_id"]
                 format_extension: str = self._get_format_extension(codec_id)
-                filename: str = f'{self.filename[:-4]}.{format_extension}'
+                filename: str = f"{self.filename[:-4]}.{format_extension}"
                 out_file: str = path.join(self.working_space_temp, filename)
 
                 # Skip re-extraction when a complete file is already there — this
                 # makes repeated runs skip the whole extraction of that track.
-                if path.isfile(out_file) and stat(out_file).st_size >= MIN_EXTRACTED_BYTES:
+                if (
+                    path.isfile(out_file)
+                    and stat(out_file).st_size >= MIN_EXTRACTED_BYTES
+                ):
                     console.print(
-                        f'Pomijam ekstrakcję (plik już istnieje): {filename}',
-                        style='green_bold')
+                        f"Pomijam ekstrakcję (plik już istnieje): {filename}",
+                        style="green_bold",
+                    )
                     continue
 
-                command: List[str] = self._get_extract_command(
-                    track_id, out_file)
+                command: list[str] = self._get_extract_command(track_id, out_file)
 
                 with Popen(command) as process:
                     console.print(
-                        f'\nEkstrakcja ścieżki {track_id} do pliku {filename}', style='yellow_bold')
+                        f"\nEkstrakcja ścieżki {track_id} do pliku {filename}",
+                        style="yellow_bold",
+                    )
                     process.wait()
 
-        except (IndexError, KeyError):
-            console.print(
-                'Znaleziono nieprawidłowe ID ścieżki!', style='red_bold')
+        except IndexError, KeyError:
+            console.print("Znaleziono nieprawidłowe ID ścieżki!", style="red_bold")
             # Re-prompting only makes sense in manual mode; an auto re-run would
             # deterministically pick the same invalid id and loop forever.
             if not auto_mode:
                 self.mkv_extract_track(data)
 
-        console.print(
-            'Ekstrakcja zakończona pomyślnie.\n', style='green_bold')
+        console.print("Ekstrakcja zakończona pomyślnie.\n", style="green_bold")
 
-    def _prompt_tracks_to_extract(self, data: Dict[str, Any]) -> Set[int]:
+    def _prompt_tracks_to_extract(self, data: dict[str, Any]) -> set[int]:
         """
-            Prompts the user for the IDs of the tracks to extract.
+        Prompts the user for the IDs of the tracks to extract.
 
-            Args:
-                - data (Dict[str, Any]): A dictionary containing information about the MKV file.
+        Args:
+            - data (Dict[str, Any]): A dictionary containing information about the MKV file.
 
-            Returns:
-                - Set[int]: The set of valid track IDs the user chose to extract.
+        Returns:
+            - Set[int]: The set of valid track IDs the user chose to extract.
         """
-        valid_track_range: range = range(len(data['tracks']))
-        tracks_to_extract: Set[int] = set()
+        valid_track_range: range = range(len(data["tracks"]))
+        tracks_to_extract: set[int] = set()
 
         while True:
             try:
-                console.print('Podaj ID ścieżki do wyciągnięcia (naciśnij ENTER, aby zakończyć): ',
-                              style='green_bold', end='')
+                console.print(
+                    "Podaj ID ścieżki do wyciągnięcia (naciśnij ENTER, aby zakończyć): ",
+                    style="green_bold",
+                    end="",
+                )
                 track_input: str = input().strip()
                 if not track_input:
                     break
@@ -290,33 +308,34 @@ class MkvToolNix:
                     tracks_to_extract.add(track_id)
                 else:
                     console.print(
-                        'Nieprawidłowy ID ścieżki. Proszę podać poprawny numer ścieżki.\n', style='red_bold')
+                        "Nieprawidłowy ID ścieżki. Proszę podać poprawny numer ścieżki.\n",
+                        style="red_bold",
+                    )
             except ValueError:
-                console.print(
-                    'Pominięto wyciąganie ścieżki.\n', style='red_bold')
+                console.print("Pominięto wyciąganie ścieżki.\n", style="red_bold")
 
         return tracks_to_extract
 
-    def _auto_select_tracks(self, data: Dict[str, Any]) -> Set[int]:
+    def _auto_select_tracks(self, data: dict[str, Any]) -> set[int]:
         """
-            Picks the original audio and source subtitle track automatically.
+        Picks the original audio and source subtitle track automatically.
 
-            Uses modules.track_selector to choose one audio track (the original,
-            played under the narrator) and one subtitle track (translated then
-            voiced) from the MKV metadata, and logs the decision. Either may be
-            absent, in which case only the available track is extracted.
+        Uses modules.track_selector to choose one audio track (the original,
+        played under the narrator) and one subtitle track (translated then
+        voiced) from the MKV metadata, and logs the decision. Either may be
+        absent, in which case only the available track is extracted.
 
-            Args:
-                - data (Dict[str, Any]): A dictionary containing information about the MKV file.
+        Args:
+            - data (Dict[str, Any]): A dictionary containing information about the MKV file.
 
-            Returns:
-                - Set[int]: The set of chosen track IDs (audio and/or subtitles).
+        Returns:
+            - Set[int]: The set of chosen track IDs (audio and/or subtitles).
         """
-        tracks: List[dict] = data['tracks']
+        tracks: list[dict] = data["tracks"]
         audio_id: int | None = select_audio_track(tracks)
         sub_id: int | None = select_subtitle_track(tracks)
 
-        tracks_to_extract: Set[int] = set()
+        tracks_to_extract: set[int] = set()
         if audio_id is not None:
             tracks_to_extract.add(audio_id)
         if sub_id is not None:
@@ -325,106 +344,110 @@ class MkvToolNix:
         audio_lang: str = self._track_language(tracks, audio_id)
         sub_lang: str = self._track_language(tracks, sub_id)
         console.print(
-            f'AUTO: ścieżka audio {audio_id if audio_id is not None else "brak"} ({audio_lang}), '
-            f'napisy {sub_id if sub_id is not None else "brak"} ({sub_lang})',
-            style='yellow_bold')
+            f"AUTO: ścieżka audio {audio_id if audio_id is not None else 'brak'} ({audio_lang}), "
+            f"napisy {sub_id if sub_id is not None else 'brak'} ({sub_lang})",
+            style="yellow_bold",
+        )
 
-        self.subtitle_already_target_lang = sub_lang in ('pol', 'pl')
+        self.subtitle_already_target_lang = sub_lang in ("pol", "pl")
 
         return tracks_to_extract
 
     @staticmethod
-    def _track_language(tracks: List[dict], track_id: int | None) -> str:
+    def _track_language(tracks: list[dict], track_id: int | None) -> str:
         """
-            Returns the language label of the track with the given id.
+        Returns the language label of the track with the given id.
 
-            Args:
-                - tracks (List[dict]): All parsed tracks of the MKV file.
-                - track_id (int | None): The id to look up, or None.
+        Args:
+            - tracks (List[dict]): All parsed tracks of the MKV file.
+            - track_id (int | None): The id to look up, or None.
 
-            Returns:
-                - str: The track language, or a placeholder when unknown.
+        Returns:
+            - str: The track language, or a placeholder when unknown.
         """
         if track_id is None:
-            return '—'
+            return "—"
         for track in tracks:
-            if track.get('id') == track_id:
+            if track.get("id") == track_id:
                 # get_mkv_info returns raw mkvmerge JSON: language sits in properties.
-                return (track.get('language')
-                        or track.get('properties', {}).get('language') or '—')
-        return '—'
+                return (
+                    track.get("language")
+                    or track.get("properties", {}).get("language")
+                    or "—"
+                )
+        return "—"
 
     @staticmethod
     def _get_format_extension(codec_id: str) -> str:
         """
-            Determines the file extension for a track based on its codec ID.
+        Determines the file extension for a track based on its codec ID.
 
-            Args:
-                - codec_id (str): The codec ID of a track in the MKV file.
+        Args:
+            - codec_id (str): The codec ID of a track in the MKV file.
 
-            Returns:
-                - str: The file extension for the track.
+        Returns:
+            - str: The file extension for the track.
         """
         format_dict: dict = {
-            'A_AAC/MPEG2/*': 'aac',
-            'A_AAC/MPEG4/*': 'aac',
-            'A_AAC': 'aac',
-            'A_AC3': 'ac3',
-            'A_EAC3': 'ac3',
-            'A_ALAC': 'caf',
-            'A_DTS': 'dts',
-            'A_FLAC': 'flac',
-            'A_MPEG/L2': 'mp2',
-            'A_MPEG/L3': 'mp3',
-            'A_OPUS': 'opus',
-            'A_PCM/INT/LIT': 'wav',
-            'A_PCM/INT/BIG': 'wav',
-            'A_REAL/*': 'rm',
-            'A_TRUEHD': 'truehd',
-            'A_MLP': 'mlp',
-            'A_TTA1': 'tta',
-            'A_VORBIS': 'ogg',
-            'A_WAVPACK4': 'wv',
-            'S_HDMV/PGS': 'sup',
-            'S_HDMV/TEXTST': 'txt',
-            'S_KATE': 'ogg',
-            'S_TEXT/SSA': 'ssa',
-            'S_TEXT/ASS': 'ass',
-            'S_SSA': 'ssa',
-            'S_ASS': 'ass',
-            'S_TEXT/UTF8': 'srt',
-            'S_TEXT/ASCII': 'srt',
-            'S_VOBSUB': 'sub',
-            'S_TEXT/USF': 'usf',
-            'S_TEXT/WEBVTT': 'vtt',
-            'V_MPEG1': 'mpeg',
-            'V_MPEG2': 'mpeg',
-            'V_MPEG4/ISO/AVC': 'h264',
-            'V_MPEG4/ISO/HEVC': 'h265',
-            'V_MS/VFW/FOURCC': 'avi',
-            'V_REAL/*': 'rm',
-            'V_THEORA': 'ogg',
-            'V_VP8': 'ivf',
-            'V_VP9': 'ivf'
+            "A_AAC/MPEG2/*": "aac",
+            "A_AAC/MPEG4/*": "aac",
+            "A_AAC": "aac",
+            "A_AC3": "ac3",
+            "A_EAC3": "ac3",
+            "A_ALAC": "caf",
+            "A_DTS": "dts",
+            "A_FLAC": "flac",
+            "A_MPEG/L2": "mp2",
+            "A_MPEG/L3": "mp3",
+            "A_OPUS": "opus",
+            "A_PCM/INT/LIT": "wav",
+            "A_PCM/INT/BIG": "wav",
+            "A_REAL/*": "rm",
+            "A_TRUEHD": "truehd",
+            "A_MLP": "mlp",
+            "A_TTA1": "tta",
+            "A_VORBIS": "ogg",
+            "A_WAVPACK4": "wv",
+            "S_HDMV/PGS": "sup",
+            "S_HDMV/TEXTST": "txt",
+            "S_KATE": "ogg",
+            "S_TEXT/SSA": "ssa",
+            "S_TEXT/ASS": "ass",
+            "S_SSA": "ssa",
+            "S_ASS": "ass",
+            "S_TEXT/UTF8": "srt",
+            "S_TEXT/ASCII": "srt",
+            "S_VOBSUB": "sub",
+            "S_TEXT/USF": "usf",
+            "S_TEXT/WEBVTT": "vtt",
+            "V_MPEG1": "mpeg",
+            "V_MPEG2": "mpeg",
+            "V_MPEG4/ISO/AVC": "h264",
+            "V_MPEG4/ISO/HEVC": "h265",
+            "V_MS/VFW/FOURCC": "avi",
+            "V_REAL/*": "rm",
+            "V_THEORA": "ogg",
+            "V_VP8": "ivf",
+            "V_VP9": "ivf",
         }
 
-        return format_dict.get(codec_id, 'mkv')
+        return format_dict.get(codec_id, "mkv")
 
-    def _get_extract_command(self, track_id: int, out_file: str) -> List[str]:
+    def _get_extract_command(self, track_id: int, out_file: str) -> list[str]:
         """
-            Constructs the command to be used for extracting a track from the MKV file with mkvextract.
-            Returns the command as a list of strings.
+        Constructs the command to be used for extracting a track from the MKV file with mkvextract.
+        Returns the command as a list of strings.
 
-            Args:
-                - track_id (int): The ID of the track to be extracted.
-                - out_file (str): The path and filename of the output file.
+        Args:
+            - track_id (int): The ID of the track to be extracted.
+            - out_file (str): The path and filename of the output file.
 
-            Returns:
-                - List[str]: The command to be used for extracting the track.
+        Returns:
+            - List[str]: The command to be used for extracting the track.
         """
         return [
             self.mkv_extract_path,
-            'tracks',
+            "tracks",
             path.join(self.working_space, self.filename),
-            f'{track_id}:{out_file}'
+            f"{track_id}:{out_file}",
         ]

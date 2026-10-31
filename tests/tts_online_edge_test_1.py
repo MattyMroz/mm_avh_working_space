@@ -13,6 +13,7 @@ Podstawowe użycie edge-tts
 
 # Python:
 import asyncio
+
 import edge_tts
 
 TEXT = "Witaj świecie! Jak się masz? Mam nadzieję, że dobrze."

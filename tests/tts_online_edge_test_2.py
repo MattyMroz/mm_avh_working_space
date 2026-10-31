@@ -14,9 +14,10 @@ Podstawowe użycie edge-tts
 import asyncio
 import os
 import wave
-from pydub import AudioSegment
+
 import edge_tts
 import pysrt
+from pydub import AudioSegment
 
 # VOICE = "pl-PL-ZofiaNeural"
 VOICE = "pl-PL-MarekNeural"
@@ -25,8 +26,7 @@ VOLUME = "+0%"
 
 
 async def generate_speech(subtitle, voice, output_file, rate, volume):
-    communicate = edge_tts.Communicate(
-        subtitle.text, voice, rate=rate, volume=volume)
+    communicate = edge_tts.Communicate(subtitle.text, voice, rate=rate, volume=volume)
     await communicate.save(output_file)
 
 
@@ -37,32 +37,39 @@ async def generate_wav_files(subtitles, voice, rate, volume):
     for i, subtitle in enumerate(subtitles, start=1):
         output_file = f"{file_name}_{i}.mp3"
         mp3_files.append(output_file)
-        tasks.append(asyncio.create_task(generate_speech(
-            subtitle, voice, output_file, rate, volume)))
+        tasks.append(
+            asyncio.create_task(
+                generate_speech(subtitle, voice, output_file, rate, volume)
+            )
+        )
     await asyncio.gather(*tasks)
     return mp3_files
 
 
 def merge_audio_files(mp3_files, subtitles):
     file_name = os.path.splitext(subtitles.path)[0]
-    with wave.open(f"{file_name}.wav", 'wb') as wav_file:
+    with wave.open(f"{file_name}.wav", "wb") as wav_file:
         wav_file.setnchannels(1)
         wav_file.setsampwidth(2)
         wav_file.setframerate(24000)
 
         audio_segments = []
-        print('\n'+subtitles.path+'\n')
+        print("\n" + subtitles.path + "\n")
         for i, mp3_file in enumerate(mp3_files, start=1):
             print(
-                f"{i}\n{subtitles[i-1].start.to_time().strftime('%H:%M:%S.%f')[:-3]} --> {subtitles[i-1].end.to_time().strftime('%H:%M:%S.%f')[:-3]}\n{subtitles[i-1].text}\n")
+                f"{i}\n{subtitles[i - 1].start.to_time().strftime('%H:%M:%S.%f')[:-3]} --> {subtitles[i - 1].end.to_time().strftime('%H:%M:%S.%f')[:-3]}\n{subtitles[i - 1].text}\n"
+            )
 
             mp3_file_path = os.path.join(dir_path, mp3_file)
             if os.path.isfile(mp3_file_path):
-                start_time = subtitles[i-1].start.to_time()
-                start_time = start_time.hour * 3600 + start_time.minute * \
-                    60 + start_time.second + start_time.microsecond / 1000000
-                sound = AudioSegment.from_file(
-                    mp3_file_path, format="mp3")
+                start_time = subtitles[i - 1].start.to_time()
+                start_time = (
+                    start_time.hour * 3600
+                    + start_time.minute * 60
+                    + start_time.second
+                    + start_time.microsecond / 1000000
+                )
+                sound = AudioSegment.from_file(mp3_file_path, format="mp3")
                 audio_segments.append(sound)
                 os.remove(mp3_file_path)
 
@@ -70,9 +77,8 @@ def merge_audio_files(mp3_files, subtitles):
                 nframes = wav_file.getnframes()
                 current_time = nframes / float(framerate)
                 if current_time < start_time:
-                    empty_frame_duration = int(
-                        (start_time - current_time) * framerate)
-                    empty_frame = b'\x00' * empty_frame_duration * 2
+                    empty_frame_duration = int((start_time - current_time) * framerate)
+                    empty_frame = b"\x00" * empty_frame_duration * 2
                     wav_file.writeframes(empty_frame)
 
                 sound_data = sound.raw_data
@@ -86,8 +92,7 @@ if __name__ == "__main__":
     for file in os.listdir(dir_path):
         if file.endswith(".srt"):
             subtitles = pysrt.open(os.path.join(dir_path, file))
-            mp3_files = asyncio.run(generate_wav_files(
-                subtitles, VOICE, RATE, VOLUME))
+            mp3_files = asyncio.run(generate_wav_files(subtitles, VOICE, RATE, VOLUME))
             merge_audio_files(mp3_files, subtitles)
 
 

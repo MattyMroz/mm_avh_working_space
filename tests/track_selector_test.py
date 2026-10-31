@@ -59,7 +59,9 @@ def test_audio_default_breaks_lang_tie() -> bool:
     tracks = [_aud(1, "kor", default=True), _aud(2, "eng", default=False)]
     got = select_audio_track(tracks)
     ok = got == 2
-    print(f"  [audio eng>kor+default] got id={got} (want 2) -> {'OK' if ok else 'FAIL'}")
+    print(
+        f"  [audio eng>kor+default] got id={got} (want 2) -> {'OK' if ok else 'FAIL'}"
+    )
     return ok
 
 
@@ -91,7 +93,10 @@ def test_subtitle_signs_only_rejected_same_lang() -> bool:
     The attested job of the penalty: English "Forced" signs (id 3) loses to the
     full English track (id 4), even though both share the top available language.
     """
-    tracks = [_sub(3, "eng", name="English (Forced)", lines=19), _sub(4, "eng", lines=305)]
+    tracks = [
+        _sub(3, "eng", name="English (Forced)", lines=19),
+        _sub(4, "eng", lines=305),
+    ]
     got = select_subtitle_track(tracks)
     ok = got == 4
     print(f"  [sub signs same-lang] got id={got} (want 4) -> {'OK' if ok else 'FAIL'}")
@@ -136,8 +141,16 @@ def test_raw_mkvmerge_properties_fallback() -> bool:
     """
     tracks = [
         {"id": 1, "type": "audio", "properties": {"language": "jpn"}},
-        {"id": 2, "type": "subtitles", "properties": {"language": "pol", "num_index_entries": 300}},
-        {"id": 3, "type": "subtitles", "properties": {"language": "eng", "num_index_entries": 350}},
+        {
+            "id": 2,
+            "type": "subtitles",
+            "properties": {"language": "pol", "num_index_entries": 300},
+        },
+        {
+            "id": 3,
+            "type": "subtitles",
+            "properties": {"language": "eng", "num_index_entries": 350},
+        },
     ]
     got_aud = select_audio_track(tracks)
     got_sub = select_subtitle_track(tracks)

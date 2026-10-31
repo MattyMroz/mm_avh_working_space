@@ -1,8 +1,7 @@
 # Test 1 edge-tts in cmd:
-from gtts import gTTS
 import os
 
-
+from gtts import gTTS
 
 # Test 2 gtts in cmd:
 mytext = "Witaj świecie! Mam na imię GOOGLE ASSISTANT."

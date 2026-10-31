@@ -1,18 +1,18 @@
 """
-    This module provides the Config class.
+This module provides the Config class.
 
-    The Config class contains static methods to get the configuration options.
-    These options include available translators, translation options, voice actors for text-to-speech, and output options.
+The Config class contains static methods to get the configuration options.
+These options include available translators, translation options, voice actors for text-to-speech, and output options.
 
-    * Example usage:
-        translators = Config.get_translators()
-        translation_options = Config.get_translation_options()
-        voice_actors = Config.get_voice_actors()
-        output_options = Config.get_output()
+* Example usage:
+    translators = Config.get_translators()
+    translation_options = Config.get_translation_options()
+    voice_actors = Config.get_voice_actors()
+    output_options = Config.get_output()
 """
 
 from dataclasses import dataclass
-from typing import Any, List, Dict
+from typing import Any
 
 
 @dataclass(slots=True)
@@ -28,7 +28,7 @@ class Config:
     """
 
     @staticmethod
-    def get_translators() -> List[Dict[str, str]]:
+    def get_translators() -> list[dict[str, str]]:
         """
         Returns a list of available translators.
 
@@ -40,12 +40,12 @@ class Config:
             List[Dict[str, str]]: A list of translators.
         """
         return [
-            {'name': 'Google Translate'},
-            {'name': 'DeepL API'},
+            {"name": "Google Translate"},
+            {"name": "DeepL API"},
         ]
 
     @staticmethod
-    def get_translation_options() -> List[Dict[str, str]]:
+    def get_translation_options() -> list[dict[str, str]]:
         """
         Returns a list of available translation options.
 
@@ -56,20 +56,20 @@ class Config:
             List[Dict[str, str]]: A list of translation options.
         """
         return [
-            {'name': '10'},
-            {'name': '20'},
-            {'name': '30'},
-            {'name': '40'},
-            {'name': '50'},
-            {'name': '60'},
-            {'name': '70'},
-            {'name': '80'},
-            {'name': '90'},
-            {'name': '100'},
+            {"name": "10"},
+            {"name": "20"},
+            {"name": "30"},
+            {"name": "40"},
+            {"name": "50"},
+            {"name": "60"},
+            {"name": "70"},
+            {"name": "80"},
+            {"name": "90"},
+            {"name": "100"},
         ]
 
     @staticmethod
-    def get_voice_actors() -> List[Dict[str, Any]]:
+    def get_voice_actors() -> list[dict[str, Any]]:
         """
         Returns a list of available voice actors for text-to-speech.
 
@@ -87,75 +87,75 @@ class Config:
         """
         return [
             {
-                'name': 'TTS - Zosia - Harpo',
-                'description': {
-                    'speed': 'Szybkość głosu od 0 do ... (słowa na minutę), domyślna: 200',
-                    'volume': 'Głośność głosu od 0 do 1, domyślna: 0.7',
+                "name": "TTS - Zosia - Harpo",
+                "description": {
+                    "speed": "Szybkość głosu od 0 do ... (słowa na minutę), domyślna: 200",
+                    "volume": "Głośność głosu od 0 do 1, domyślna: 0.7",
                 },
-                'default_options': {
-                    'default_voice_speed': '200',
-                    'default_voice_volume': '0.7',
-                },
-            },
-            {
-                'name': 'TTS - Agnieszka - Ivona',
-                'description': {
-                    'speed': 'Szybkość głosu od -10 do 10, domyślna: 5',
-                    'volume': 'Głośność głosu od 0 do 100, domyślna: 65',
-                },
-                'default_options': {
-                    'default_voice_speed': '5',
-                    'default_voice_volume': '65',
+                "default_options": {
+                    "default_voice_speed": "200",
+                    "default_voice_volume": "0.7",
                 },
             },
             {
-                'name': 'TTS - Zofia - Edge',
-                'description': {
-                    'speed': 'Szybkość głosu (+/- ? %) od -100% do +100%, domyślna: +40%',
-                    'volume': 'Głośność głosu (+/- ? %) od -100% do +100%, domyślna: +0%',
+                "name": "TTS - Agnieszka - Ivona",
+                "description": {
+                    "speed": "Szybkość głosu od -10 do 10, domyślna: 5",
+                    "volume": "Głośność głosu od 0 do 100, domyślna: 65",
                 },
-                'default_options': {
-                    'default_voice_speed': '+40%',
-                    'default_voice_volume': '+0%',
-                },
-            },
-            {
-                'name': 'TTS - Marek - Edge',
-                'description': {
-                    'speed': 'Szybkość głosu (+/- ? %) od -100% do +100%, domyślna: +40%',
-                    'volume': 'Głośność głosu (+/- ? %) od -100% do +100%, domyślna: +0%',
-                },
-                'default_options': {
-                    'default_voice_speed': '+40%',
-                    'default_voice_volume': '+0%',
+                "default_options": {
+                    "default_voice_speed": "5",
+                    "default_voice_volume": "65",
                 },
             },
             {
-                'name': 'TTS - ElevenBytes (ElevenLabs v2)',
-                'description': {
-                    'speed': 'Szybkość głosu: Auto',
-                    'volume': 'Głośność głosu: Auto',
+                "name": "TTS - Zofia - Edge",
+                "description": {
+                    "speed": "Szybkość głosu (+/- ? %) od -100% do +100%, domyślna: +40%",
+                    "volume": "Głośność głosu (+/- ? %) od -100% do +100%, domyślna: +0%",
                 },
-                'default_options': {
-                    'default_voice_speed': 'auto',
-                    'default_voice_volume': 'auto',
+                "default_options": {
+                    "default_voice_speed": "+40%",
+                    "default_voice_volume": "+0%",
                 },
             },
             {
-                'name': 'TTS - ElevenBytes (ElevenLabs v3)',
-                'description': {
-                    'speed': 'Szybkość głosu: Auto',
-                    'volume': 'Głośność głosu: Auto',
+                "name": "TTS - Marek - Edge",
+                "description": {
+                    "speed": "Szybkość głosu (+/- ? %) od -100% do +100%, domyślna: +40%",
+                    "volume": "Głośność głosu (+/- ? %) od -100% do +100%, domyślna: +0%",
                 },
-                'default_options': {
-                    'default_voice_speed': 'auto',
-                    'default_voice_volume': 'auto',
+                "default_options": {
+                    "default_voice_speed": "+40%",
+                    "default_voice_volume": "+0%",
+                },
+            },
+            {
+                "name": "TTS - ElevenBytes (ElevenLabs v2)",
+                "description": {
+                    "speed": "Szybkość głosu: Auto",
+                    "volume": "Głośność głosu: Auto",
+                },
+                "default_options": {
+                    "default_voice_speed": "auto",
+                    "default_voice_volume": "auto",
+                },
+            },
+            {
+                "name": "TTS - ElevenBytes (ElevenLabs v3)",
+                "description": {
+                    "speed": "Szybkość głosu: Auto",
+                    "volume": "Głośność głosu: Auto",
+                },
+                "default_options": {
+                    "default_voice_speed": "auto",
+                    "default_voice_volume": "auto",
                 },
             },
         ]
 
     @staticmethod
-    def get_post_processing() -> Dict[str, str]:
+    def get_post_processing() -> dict[str, str]:
         """Returns post-processing configuration for FFmpeg speed/volume adjustment.
 
         These settings are independent of any TTS model and are applied
@@ -166,14 +166,14 @@ class Config:
             default_pp_speed, default_pp_volume.
         """
         return {
-            'description_speed': 'Przyspieszenie lektora (atempo) od 0.5 do 3.0, domyślna: 1.0 (bez zmiany)',
-            'description_volume': 'Zmiana głośności lektora w dB (np. 0, 5, -3), domyślna: 0 (bez zmiany)',
-            'default_pp_speed': '1.0',
-            'default_pp_volume': '0',
+            "description_speed": "Przyspieszenie lektora (atempo) od 0.5 do 3.0, domyślna: 1.0 (bez zmiany)",
+            "description_volume": "Zmiana głośności lektora w dB (np. 0, 5, -3), domyślna: 0 (bez zmiany)",
+            "default_pp_speed": "1.0",
+            "default_pp_volume": "0",
         }
 
     @staticmethod
-    def get_output() -> List[Dict[str, str]]:
+    def get_output() -> list[dict[str, str]]:
         """
         Returns a list of available output options.
 
@@ -184,7 +184,7 @@ class Config:
             List[Dict[str, str]]: A list of output options.
         """
         return [
-            {'name': 'Oglądam w MM_AVH_Players (wynik: napisy i audio)'},
-            {'name': 'Scal do mkv'},
-            {'name': 'Wypal do mp4'},
+            {"name": "Oglądam w MM_AVH_Players (wynik: napisy i audio)"},
+            {"name": "Scal do mkv"},
+            {"name": "Wypal do mp4"},
         ]

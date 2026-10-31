@@ -6,7 +6,8 @@ sentences = sent_tokenize(text)
 for i, sentence in enumerate(sentences, start=1):
     print(f"{i}\n00:00:00,000 --> 00:00:00,000\n{sentence}\n")
 import nltk
-nltk.download('punkt')
+
+nltk.download("punkt")
 
 text = "Oto przykładowe zdanie w języku polskim."
 tokens = nltk.word_tokenize(text)
