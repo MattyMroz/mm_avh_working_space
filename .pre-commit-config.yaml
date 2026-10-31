@@ -86,7 +86,7 @@ repos:
           - revert
 
   - repo: https://github.com/MattyMroz/agents
-    rev: hooks-v1.3.0 # or newer: prek autoupdate
+    rev: hooks-v1.3.1 # or newer: prek autoupdate
     hooks:
       # U+FFFD is what a botched encoding leaves behind.
       - id: no-replacement-char
