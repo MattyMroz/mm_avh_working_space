@@ -12,7 +12,7 @@
 
 **Stack:** Python 3.14+, pydub, edge-tts, pyttsx3, googletrans, deepl, nltk, pydantic, rich oraz neural-TTS (torch, torchaudio, transformers, librosa, phonemizer, safetensors)
 
----
+______________________________________________________________________
 
 ## 📁 Struktura katalogów
 
@@ -77,7 +77,7 @@ mm_avh_working_space/
 └── README.md                         # Dokumentacja użytkownika
 ```
 
----
+______________________________________________________________________
 
 ## 📄 Szczegóły plików
 
@@ -118,7 +118,7 @@ mm_avh_working_space/
 - **Custom uv sources:** `torch`/`torchaudio` z indeksu `pytorch-cu128` (CUDA 12.8), `monotonic-align` z gita (resemble-ai)
 - **Kluczowe zależności (pełna lista niżej):** klasyczny stack (pydub, edge-tts, pyttsx3, googletrans, deepl, rich, pydantic) **+ neural-TTS stack** (torch, torchaudio, transformers, librosa, phonemizer, safetensors, einops, accelerate, nnaudio, ring-attention-pytorch)
 
----
+______________________________________________________________________
 
 ## 🔧 Moduły (modules/)
 
@@ -213,7 +213,7 @@ mm_avh_working_space/
   - statyczne `list_voices()`, `add_voice(alias, name, voice_id)`, `remove_voice(alias)`
   - property `default_voice`
 
----
+______________________________________________________________________
 
 ## 📊 Data Layer (data/)
 
@@ -235,7 +235,7 @@ mm_avh_working_space/
   - `load_from_file(settings_path)` → Load z JSON, fallback defaults
   - `change_settings_save_to_file()` → Interactive menu → JSON
 
----
+______________________________________________________________________
 
 ## 🛠️ Utils (utils/)
 
@@ -261,21 +261,21 @@ mm_avh_working_space/
 - **Cel:** Chunking tekstu dla TTS (WordBreaker, CharBreaker, LatinPunctuator).
 - **Klasy:** `LatinPunctuator`, `WordBreaker(wordLimit)`, `CharBreaker(charLimit)`; funkcja `chunk_text()`
 
----
+______________________________________________________________________
 
 ## 🗣️ Voice Actors / TTS
 
-| Głos | Engine | Typ | Uwagi |
-|------|--------|-----|-------|
-| Zosia | Harpo (pyttsx3) | Offline/Systemowy | Default SAPI5 |
-| Agnieszka | Ivona (Balabolka) | Offline/Systemowy | Premium SAPI5 (CLI) |
-| Zofia / Marek | Edge TTS | Online (FREE) | Microsoft cloud, async |
-| StylishTTS | torch (lokalnie) | Neural/Offline | Model w `bin/stylish_tts/`, wymaga espeak-ng (G2P) |
-| Fish | Fish TTS API | Online (API) | `tts_fish_api.py` |
-| ReadLover | ReadLover API | Online (API) | `tts_readlover.py`, fallback wielu kluczy |
-| ElevenBytes / [Custom] | ElevenLabs-like API / manual | Online | `tts_elevenbytes.py` lub manualny WAV/EAC3 |
+| Głos                   | Engine                       | Typ               | Uwagi                                              |
+| ---------------------- | ---------------------------- | ----------------- | -------------------------------------------------- |
+| Zosia                  | Harpo (pyttsx3)              | Offline/Systemowy | Default SAPI5                                      |
+| Agnieszka              | Ivona (Balabolka)            | Offline/Systemowy | Premium SAPI5 (CLI)                                |
+| Zofia / Marek          | Edge TTS                     | Online (FREE)     | Microsoft cloud, async                             |
+| StylishTTS             | torch (lokalnie)             | Neural/Offline    | Model w `bin/stylish_tts/`, wymaga espeak-ng (G2P) |
+| Fish                   | Fish TTS API                 | Online (API)      | `tts_fish_api.py`                                  |
+| ReadLover              | ReadLover API                | Online (API)      | `tts_readlover.py`, fallback wielu kluczy          |
+| ElevenBytes / [Custom] | ElevenLabs-like API / manual | Online            | `tts_elevenbytes.py` lub manualny WAV/EAC3         |
 
----
+______________________________________________________________________
 
 ## 🔄 Pipeline Flow
 
@@ -311,7 +311,7 @@ USER START (run_mm_avh.bat / uv run start.py)
 └─► END
 ```
 
----
+______________________________________________________________________
 
 ## 📋 Zależności (pyproject.toml)
 
@@ -368,7 +368,7 @@ USER START (run_mm_avh.bat / uv run start.py)
 - `six>=1.17.0` — Py2/3 compat shim
 - `types-requests>=2.33.0.20260408` — type stubs
 
----
+______________________________________________________________________
 
 ## 🏗️ Architektura / Design Patterns
 
@@ -379,7 +379,7 @@ USER START (run_mm_avh.bat / uv run start.py)
 - **Pipeline Orchestration** — `main()` w `start.py` → sekwencyjne wykonanie krok po kroku
 - **Fallback Strategy** — Translation chunking → single-by-single; TTS timeout → fallback; ReadLover → fallback między kluczami API
 
----
+______________________________________________________________________
 
 ## 🧰 Konfiguracja narzędziowa (AI / repo)
 
@@ -387,25 +387,25 @@ USER START (run_mm_avh.bat / uv run start.py)
 - **`.github/`** — katalog AI (gitignore w całości); aktualnie zawiera tylko `temp/` z roboczymi plikami.
 - **`bin/`** — binaria silników (gitignore): `balabolka`, `espeak-ng`, `ffmpeg`, `mkvtoolnix`, `stylish_tts`.
 
----
+______________________________________________________________________
 
 ## 📚 Test Files (tests/)
 
-| Plik | Cel |
-|------|-----|
-| `tts_test.py` | Unified TTS test |
-| `tts_balcon_test.py` | Test Balabolka |
-| `tts_google_test.py` | Test pyttsx3 (Google voice) |
-| `tts_local_test.py` | Test pyttsx3 offline |
-| `tts_online_edge_test_0/1/2.py` | Test Edge TTS (warianty) |
-| `translator_test.py` | Test Google Translate |
-| `translator-gpt-re-ask_alt.py` / `...no-re-ask_alt.py` | Test ChatGPT (warianty re-ask) |
-| `chat.py` | Eksperymenty z LLM chat |
-| `sent_tokenize_test.py` | Test NLTK sentence tokenization |
-| `num2words_test.py` | Test konwersji liczb |
-| `merge_audio_test.py` | Test audio merge (pydub) |
-| `real_esrgan_and_others.py` | Eksperymenty upscalingu / inne |
-| `pylint_tests.py` | Lint checks |
-| `MM_AVH_pre.py` | Prototype starej wersji |
+| Plik                                                   | Cel                             |
+| ------------------------------------------------------ | ------------------------------- |
+| `tts_test.py`                                          | Unified TTS test                |
+| `tts_balcon_test.py`                                   | Test Balabolka                  |
+| `tts_google_test.py`                                   | Test pyttsx3 (Google voice)     |
+| `tts_local_test.py`                                    | Test pyttsx3 offline            |
+| `tts_online_edge_test_0/1/2.py`                        | Test Edge TTS (warianty)        |
+| `translator_test.py`                                   | Test Google Translate           |
+| `translator-gpt-re-ask_alt.py` / `...no-re-ask_alt.py` | Test ChatGPT (warianty re-ask)  |
+| `chat.py`                                              | Eksperymenty z LLM chat         |
+| `sent_tokenize_test.py`                                | Test NLTK sentence tokenization |
+| `num2words_test.py`                                    | Test konwersji liczb            |
+| `merge_audio_test.py`                                  | Test audio merge (pydub)        |
+| `real_esrgan_and_others.py`                            | Eksperymenty upscalingu / inne  |
+| `pylint_tests.py`                                      | Lint checks                     |
+| `MM_AVH_pre.py`                                        | Prototype starej wersji         |
 
 > Katalogi pomocnicze: `tests/input/`, `tests/output/`.

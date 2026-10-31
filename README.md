@@ -17,14 +17,14 @@
 
 ## ✨ Funkcje
 
-| Funkcja | Opis |
-|---------|------|
-| 🎬 Ekstrakcja | Wyciąganie audio i napisów z MKV |
-| 📝 Konwersja | ASS → SRT, podział według stylów |
-| 🌍 Tłumaczenie | Google Translate, DeepL, ChatGPT |
-| 🎤 Lektorowanie | Edge TTS, Ivona, Harpo |
-| 📚 Audiobooki | Generowanie z TXT/SRT |
-| 🎥 Scalanie | MKV z lektorem lub wypalone MP4 |
+| Funkcja         | Opis                             |
+| --------------- | -------------------------------- |
+| 🎬 Ekstrakcja   | Wyciąganie audio i napisów z MKV |
+| 📝 Konwersja    | ASS → SRT, podział według stylów |
+| 🌍 Tłumaczenie  | Google Translate, DeepL, ChatGPT |
+| 🎤 Lektorowanie | Edge TTS, Ivona, Harpo           |
+| 📚 Audiobooki   | Generowanie z TXT/SRT            |
+| 🎥 Scalanie     | MKV z lektorem lub wypalone MP4  |
 
 ## 🚀 Instalacja i uruchomienie
 
@@ -63,18 +63,19 @@ mm_avh_working_space/
 
 ## 🎤 Głosy TTS
 
-| Głos | Silnik | Typ |
-|------|--------|-----|
-| Zofia | Edge TTS | Online (darmowy) |
-| Marek | Edge TTS | Online (darmowy) |
-| Agnieszka | Ivona | Systemowy |
-| Zosia | Harpo | Systemowy |
+| Głos      | Silnik   | Typ              |
+| --------- | -------- | ---------------- |
+| Zofia     | Edge TTS | Online (darmowy) |
+| Marek     | Edge TTS | Online (darmowy) |
+| Agnieszka | Ivona    | Systemowy        |
+| Zosia     | Harpo    | Systemowy        |
 
 ## ⚙️ Konfiguracja
 
 Ustawienia zapisują się automatycznie w `data/settings.json`.
 
 Przy pierwszym uruchomieniu program zapyta o:
+
 - Translator (Google/DeepL/ChatGPT)
 - Głos TTS
 - Szybkość i głośność
@@ -83,11 +84,13 @@ Przy pierwszym uruchomieniu program zapyta o:
 ## 🔧 Edge TTS - lepsza jakość
 
 Po `uv sync` zmień w pliku `edge_tts/communicate.py` (linia ~407):
+
 ```
 48kbitrate → 96kbitrate
 ```
 
 Znajdź plik:
+
 ```bash
 uv run python -c "import edge_tts, os; print(os.path.dirname(edge_tts.__file__))"
 ```

@@ -18,16 +18,19 @@ powyżej progu, log "pomijam" i przejdź do następnej ścieżki. Zmiana punktow
 - Guard oparty na rozmiarze (kompletność) — niekompletny/pusty plik NIE może być uznany za cache
 - Zgodność z Python instructions: guard clause, typing
 
----
+______________________________________________________________________
 
 ### Task 1: Guard cache w mkv_extract_track
 
 **Files:**
+
 - Modify: `modules/mkvtoolnix.py` — pętla ekstrakcji w `mkv_extract_track` (obecnie linie ~229-241)
 
 **Interfaces:**
+
 - Consumes: `self.working_space_temp`, `self.filename`, `self._get_format_extension`,
   `self._get_extract_command` (istniejące).
+
 - Produces: brak nowego publicznego API — tylko wewnętrzna zmiana zachowania pętli.
 
 - [ ] **Step 1: Dodaj stałą progu rozmiaru**
@@ -72,12 +75,15 @@ from os import path, stat
 - [ ] **Step 4: Weryfikacja — kompilacja + test guardu**
 
 Run:
+
 ```bash
 cd "c:/Users/MattyMroz/Desktop/PROJECTS/mm_avh_working_space" && python -m py_compile modules/mkvtoolnix.py && echo OK
 ```
+
 Expected: `OK`
 
 Test logiki guardu (bez realnego MKV — sprawdzamy warunek):
+
 ```bash
 uv run python -c "
 import os, tempfile
@@ -93,6 +99,7 @@ assert not (path.isfile(small) and stat(small).st_size >= MIN_EXTRACTED_BYTES)
 print('guard OK: kompletny pomijany, niekompletny re-ekstrahowany')
 "
 ```
+
 Expected: `guard OK: ...`
 
 - [ ] **Step 5: Commit**
@@ -102,12 +109,12 @@ git add modules/mkvtoolnix.py
 git commit -m "perf: cache ekstrakcji MKV — pomiń gdy plik już istnieje (B1)"
 ```
 
----
+______________________________________________________________________
 
 ## Self-Review
 
 - **Spec coverage:** B1 z briefu (cache extract, guard path.exists+rozmiar) → Task 1. ✅
 - **Placeholder scan:** brak TBD/TODO; cały kod podany. ✅
 - **Type consistency:** `MIN_EXTRACTED_BYTES: int`, `stat().st_size` int — spójne. ✅
-- **Ryzyko:** guard oparty na rozmiarze — niekompletny plik (<1024 B) jest re-ekstrahowany,
+- **Ryzyko:** guard oparty na rozmiarze — niekompletny plik (\<1024 B) jest re-ekstrahowany,
   więc nie zostawiamy śmiecia. Zgodne z constraint.
