@@ -1,189 +1,302 @@
-# =============================================================================
-# MM_AVH (Multimedia Magic – Audio Visual Heaven) - .gitignore
-# =============================================================================
-# Project: MM_AVH — Subtitle translation & TTS dubbing pipeline
-# Stack:   Python 3.14+ | pyttsx3 | edge-tts | pydub | rich
-# =============================================================================
+# ── Sections ──────────────────────────────────────────────────────────────────
+#   1. AI agents      5. Editors & OS    9. Project-specific
+#   2. Secrets        6. Scratch & logs  10. Re-includes
+#   3. Python (uv)    7. Binaries        11. Final invariants — keep last
+#   4. Node / Bun     8. Other stacks
+#
+#   Order is load-bearing: last match wins, so each section overrides the ones
+#   above it. Paste foreign templates into section 8, never at the end.
+#   Mixed folder: `dir/*` + `!dir/keeper`, never `dir/` + `!dir/keeper`
+# ──────────────────────────────────────────────────────────────────────────────
 
-# --- Python -------------------------------------------------------------------
+# ── AI agents ─────────────────────────────────────────────────────────────────
+.claude/*
+.codex/*
+.agents/
+.worktrees/*
+
+# ── AI agents: other tools — uncomment what you use ───────────────────────────
+# .cursor/*
+# !.cursor/rules/
+# .windsurf/
+# .clinerules/
+# .kiro/
+# .qoder/
+# .opencode/
+# .openclaw/
+# .aider*
+# .continue/
+
+# ── Secrets ───────────────────────────────────────────────────────────────────
+.env
+.env.*
+.envrc
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.asc
+*.gpg
+*.ppk
+credentials.json
+secrets.json
+secrets.enc
+*-token.txt
+*.token
+
+# ── Python (uv) ───────────────────────────────────────────────────────────────
 __pycache__/
-*.py[cod]
+*.py[codz]
 *$py.class
-*.so
-*.pyo
-*.pyd
 .Python
-
-# --- Build & Distribution -----------------------------------------------------
 build/
 dist/
-develop-eggs/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
 sdist/
-var/
 wheels/
 *.egg-info/
-.installed.cfg
 *.egg
 MANIFEST
-pip-log.txt
-pip-delete-this-directory.txt
-
-# --- Virtual Environments -----------------------------------------------------
 .venv/
 venv/
-ENV/
 env/
-# NOTE: .python-version and uv.lock SHOULD be committed
-
-# --- Testing & Coverage -------------------------------------------------------
+ENV/
 .pytest_cache/
-.coverage
-.coverage.*
-htmlcov/
-.artifacts/
+.hypothesis/
 .tox/
 .nox/
+.coverage
+.coverage.*
 coverage.xml
-*.cover
+htmlcov/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+.ruff_cache/
+.uv-cache/
+.import_linter_cache/
+cython_debug/
+.pypirc
+.ipynb_checkpoints/
 
-# --- IDE & Editor -------------------------------------------------------------
-.vscode/
-.idea/
+# ── Node / Bun / Vite ─────────────────────────────────────────────────────────
+node_modules/
+dist/
+out/
+.output/
+.vite/
+vite.config.*.timestamp-*
+*.tsbuildinfo
+next-env.d.ts
+.npm
+.eslintcache
+.stylelintcache
+*.tgz
+.pnpm-store/
+.turbo/
+.parcel-cache/
+.cache/
+coverage/
+.nyc_output/
+.next/
+.nuxt/
+.svelte-kit/
+.astro/
+.docusaurus/
+.vercel/
+.netlify/
+**/.vitepress/dist
+**/.vitepress/cache
+
+# ── Rust / Tauri ──────────────────────────────────────────────────────────────
+# `target/` alone already matches at any depth (frontend/src-tauri/target/).
+# `**/` is only needed when the pattern itself contains a slash, like the next one.
+target/
+**/src-tauri/gen/
+**/*.rs.bk
+*.pdb
+rustc-ice-*.txt
+
+# ── Editors ───────────────────────────────────────────────────────────────────
+.vscode/*
+.idea/*
+*.vsix
+.vscode-test/
 *.swp
 *.swo
 *~
-*.bak
-*.sublime-project
-*.sublime-workspace
 
-# --- Jupyter ------------------------------------------------------------------
-.ipynb_checkpoints/
-*.ipynb
-
-# --- OS Generated -------------------------------------------------------------
+# ── OS ────────────────────────────────────────────────────────────────────────
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.stackdump
+*.lnk
 .DS_Store
-.DS_Store?
+.AppleDouble
+.LSOverride
 ._*
 .Spotlight-V100
 .Trashes
-ehthumbs.db
-Thumbs.db
-desktop.ini
-$RECYCLE.BIN/
+.fseventsd
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+nohup.out
 
-# --- Environment Variables ----------------------------------------------------
-.env
-.env.local
-.env.*.local
-!.env.example
-
-# --- Logs ---------------------------------------------------------------------
+# ── Scratch & logs ────────────────────────────────────────────────────────────
+temp/
+tmp/
 logs/
 *.log
 *.log.*
-*.log.jsonl
-
-# --- Temporary Files ----------------------------------------------------------
+*.cache
 *.tmp
 *.temp
-*.cache
+*.bak
+*.orig
+*.rej
+*.dump
+*.pid
+*.pid.lock
+*.seed
 
-# --- Images -------------------------------------------------------------------
+# ── Binaries: images ──────────────────────────────────────────────────────────
+*.png
 *.jpg
 *.jpeg
-*.png
 *.gif
 *.bmp
-*.tiff
-*.tif
 *.webp
-*.svg
+*.avif
+*.jxl
+*.tif
+*.tiff
 *.ico
 *.heic
 *.heif
+*.psd
+*.xcf
+*.dng
 
-# --- Video --------------------------------------------------------------------
+# ── Binaries: video & audio ───────────────────────────────────────────────────
+# No *.ts here — that is TypeScript, not MPEG transport stream.
 *.mp4
+*.mkv
 *.avi
 *.mov
-*.mkv
-*.flv
-*.wmv
 *.webm
-
-# --- Audio --------------------------------------------------------------------
+*.m4v
+*.wmv
+*.flv
+*.mpg
+*.mpeg
+*.m2ts
 *.mp3
 *.wav
 *.flac
-*.aac
 *.ogg
+*.opus
+*.aac
+*.m4a
+*.ac3
 *.eac3
+*.dts
 
-# --- AI/ML Model Weights -----------------------------------------------------
-*.h5
-*.hdf5
-*.pkl
-*.pickle
+# ── Binaries: ML models & weights ─────────────────────────────────────────────
+*.onnx
+*.safetensors
+*.ckpt
 *.pt
 *.pth
-*.ckpt
+*.h5
+*.hdf5
 *.pb
-*.onnx
 *.tflite
-*.caffemodel
 *.weights
-*.safetensors
-*.msgpack
+*.gguf
+*.ggml
+*.engine
+*.trt
+*.caffemodel
+*.mlmodel
+*.joblib
 *.bin
 
-# --- Data Files ---------------------------------------------------------------
+# ── Binaries: datasets & serialized data ──────────────────────────────────────
 *.csv
 *.tsv
-*.dat
-*.npy
-*.npz
 *.parquet
 *.feather
 *.arrow
+*.npy
+*.npz
+*.msgpack
+*.pickle
+*.pkl
+*.dat
 
-# --- Archives -----------------------------------------------------------------
+# ── Binaries: databases ───────────────────────────────────────────────────────
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+
+# ── Binaries: archives & installers ───────────────────────────────────────────
 *.zip
 *.tar
-*.tar.gz
-*.tar.bz2
-*.tar.xz
-*.rar
-*.7z
+*.tar.*
 *.gz
 *.bz2
+*.xz
+*.7z
+*.rar
+*.iso
+*.dmg
+*.deb
+*.rpm
+*.msi
+*.AppImage
 
-# --- Database -----------------------------------------------------------------
-*.db
-*.sqlite
-*.sqlite3
+# ── Binaries: compiled objects ────────────────────────────────────────────────
+*.exe
+*.dll
+*.dylib
+*.so
+*.a
+*.lib
+*.o
+*.obj
 
-# --- Subtitle files (binary/generated) ----------------------------------------
+# ── Python extras ─────────────────────────────────────────────────────────────
+# .ipynb_checkpoints/          Jupyter
+# local_settings.py            Django
+# instance/                    Flask
+# celerybeat-schedule*         Celery
+# .pixi/*                      pixi
+# Pipfile.lock                 pipenv
+
+# ── Other stacks — PASTE FOREIGN TEMPLATES HERE, NOT AT THE END ───────────────
+# Go, Java, .NET, PHP, Ruby, Terraform, Docker and ~500 more:
+# github.com/github/gitignore — paste below this line.
+# Everything after this section overrides templates, which is the point.
+
+# ── Project-specific — fill in, delete the rest ───────────────────────────────
+# Subtitle files (binary/generated)
 *.srt
 *.ass
 
-# --- Executables --------------------------------------------------------------
-*.exe
-*.lnk
-
-# =============================================================================
-# PROJECT-SPECIFIC RULES
-# =============================================================================
-
-# --- .github (Copilot AI agent configs — internal, not for VCS) ---------------
+# .github (Copilot AI agent configs — internal, not for VCS)
 .github/
 
-# --- Working Space (runtime I/O, user data) -----------------------------------
+# Working Space (runtime I/O, user data)
 # Keep ONLY folder structure (.gitkeep), ignore all media/subtitle files
 working_space/**
 !working_space/
@@ -198,14 +311,110 @@ working_space/**
 !working_space/temp/alt_subs/
 !working_space/temp/alt_subs/.gitkeep
 
-# --- Bin (external tools — large binaries) ------------------------------------
-bin/
+# Bin (external tools — large binaries); bin/** not bin/, so tracked docs can be re-included below
+bin/**
 
-# --- Temp brainstorm files ----------------------------------------------------
-temp/
-
-# --- Claude Code (skille/config syncowane z repo agents — źródło prawdy tam) ---
-.claude/
-
-# --- User settings z kluczami API (NIE commitować — sekrety) -------------------
+# User settings z kluczami API (NIE commitować — sekrety)
 data/settings.json
+
+# ── Re-includes ───────────────────────────────────────────────────────────────
+# Every keeper lives HERE, not next to the rule it escapes — a template pasted
+# into section 8 would otherwise bury negations written above it.
+# Order inside: `!dir/` and `!dir/**/` first, so git can descend; then files.
+# Never `!dir/**` — that also lets video and model weights back in.
+
+# Hand-written config
+!.claude/
+!.claude/settings.json
+!.claude/commands/
+!.worktrees/
+!.worktrees/.gitkeep
+!.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/*.code-snippets
+!.idea/
+!.idea/runConfigurations/
+!.env.example
+!.env.sample
+!.env.template
+
+# Committed assets — bundlers also keep them in src/assets, not just assets/
+!**/assets/
+!**/assets/**/
+!public/
+!public/**/
+!docs/
+!docs/**/
+!**/src-tauri/icons/**
+!**/assets/**/*.png
+!**/assets/**/*.jpg
+!**/assets/**/*.jpeg
+!**/assets/**/*.webp
+!**/assets/**/*.svg
+!**/assets/**/*.ico
+!public/**/*.png
+!public/**/*.jpg
+!public/**/*.jpeg
+!public/**/*.webp
+!public/**/*.svg
+!public/**/*.ico
+!docs/**/*.png
+!docs/**/*.jpg
+!docs/**/*.svg
+
+# Test fixtures — small by definition, and the tests need them in git
+!**/fixtures/
+!**/fixtures/**/
+!**/fixtures/**/*.csv
+!**/fixtures/**/*.tsv
+!**/fixtures/**/*.parquet
+!**/fixtures/**/*.png
+!**/fixtures/**/*.jpg
+!**/fixtures/**/*.jpeg
+!**/fixtures/**/*.webp
+!**/fixtures/**/*.gif
+!**/fixtures/**/*.ico
+!**/fixtures/**/*.zip
+!**/fixtures/**/*.bin
+
+# Tracked content stays tracked (decision 2026-10-30).
+!bin/balabolka/
+!bin/ffmpeg/
+!bin/ffmpeg/**/
+!bin/mkvtoolnix/
+!bin/mkvtoolnix/**/
+!bin/**/*.css
+!bin/**/*.cue
+!bin/**/*.dtd
+!bin/**/*.ffpreset
+!bin/**/*.html
+!bin/**/*.mo
+!bin/**/*.qm
+!bin/**/*.txt
+!bin/**/*.url
+!bin/**/*.webm
+!bin/**/*.xml
+!bin/ffmpeg/LICENSE
+!bin/mkvtoolnix/data/portable-app
+!assets/img/*.gif
+
+# ── Project overrides — ignores that must beat the re-includes above ──────────
+# docs/session-logs/
+# public/uploads/
+
+# ── Final invariants — MUST STAY LAST ─────────────────────────────────────────
+# Enforced, not documented: last match wins, so nothing above can bury these.
+!uv.lock
+!bun.lock
+!bun.lockb
+!Cargo.lock
+!package-lock.json
+!pnpm-lock.yaml
+!yarn.lock
+!.python-version
+!.nvmrc
+!.gitignore
+!.gitattributes
