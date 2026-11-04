@@ -294,7 +294,7 @@ logs/
 *.ass
 
 # .github (Copilot AI agent configs — internal, not for VCS)
-.github/
+.github/*
 
 # Working Space (runtime I/O, user data)
 # Keep ONLY folder structure (.gitkeep), ignore all media/subtitle files
@@ -327,6 +327,7 @@ data/settings.json
 !.claude/
 !.claude/settings.json
 !.claude/commands/
+!.github/workflows/
 !.worktrees/
 !.worktrees/.gitkeep
 !.vscode/

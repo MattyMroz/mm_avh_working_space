@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  hooks:
+    name: Hooks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: j178/prek-action@v3.1.0
+        with:
+          prek-version: 0.5.4
+          install-only: true
+
+      - name: Pull request messages
+        if: github.event_name == 'pull_request' && !endsWith(github.event.pull_request.user.login, '[bot]')
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          failed=0
+          printf '%s\n\n%s\n' "$TITLE" "$BODY" > "$RUNNER_TEMP/message"
+          if ! prek run --stage commit-msg --commit-msg-filename "$RUNNER_TEMP/message"; then
+            echo "::error::pull request title or description breaks the commit message rules"
+            failed=1
+          fi
+          shas=$(git rev-list --no-merges "$BASE..$HEAD")
+          for sha in $shas; do
+            case "$(git log -1 --format=%an "$sha")" in *'[bot]') continue ;; esac
+            git log -1 --format=%B "$sha" > "$RUNNER_TEMP/message"
+            if ! prek run --stage commit-msg --commit-msg-filename "$RUNNER_TEMP/message"; then
+              echo "::error::commit $sha breaks the commit message rules"
+              failed=1
+            fi
+          done
+          exit "$failed"
+
+      - name: Pushed commits
+        if: github.event_name == 'push'
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after }}
+        run: |
+          case "$BEFORE" in
+            *[!0]*) range="$BEFORE..$AFTER" ;;
+            *) range="$AFTER^!" ;;
+          esac
+          for rev in "$BEFORE" "$AFTER"; do
+            case "$rev" in *[!0]*) ;; *) continue ;; esac
+            if ! git cat-file -e "$rev^{commit}" 2>/dev/null; then
+              echo "::error::$rev is not in this clone; check the pushed commits locally"
+              exit 1
+            fi
+          done
+          failed=0
+          shas=$(git rev-list --no-merges "$range")
+          for sha in $shas; do
+            case "$(git log -1 --format=%an "$sha")" in *'[bot]') continue ;; esac
+            git log -1 --format=%B "$sha" > "$RUNNER_TEMP/message"
+            if ! prek run --stage commit-msg --commit-msg-filename "$RUNNER_TEMP/message"; then
+              echo "::error::commit $sha breaks the commit message rules"
+              failed=1
+            fi
+          done
+          exit "$failed"
+
+      - name: Commit hooks
+        env:
+          SKIP: no-commit-to-branch
+        run: prek run --all-files --show-diff-on-failure

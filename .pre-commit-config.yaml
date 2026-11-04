@@ -1,36 +1,11 @@
-# Git hooks — one file, blocks marked by what the repo tracks.
-#
-# Copy to <project>/.pre-commit-config.yaml, DELETE the blocks and hooks that do
-# not apply (each block header says when it stays), fill in the scopes, then:
-#
-#   git config --local core.autocrlf false     # or mixed-line-ending loops forever
-#   prek install                               # or: uv run pre-commit install
-#   prek run --all-files                       # build environments before first commit
-#
-# DELETE blocks, do not comment them out — prek's check-yaml rejects long runs of
-# comment lines (j178/prek#2501).
-#
-# A vendored subproject with its own .pre-commit-config.yaml runs as a separate
-# prek project. Keep it out: list its directory in a root .prekignore
-# (gitignore syntax), then `prek list --refresh`.
-#
-# After editing, verify no hook is left without files:
-#   prek run --hook-stage manual --all-files
-
 minimum_pre_commit_version: "4.0.0"
 default_install_hook_types: [pre-commit, commit-msg, pre-push]
 default_stages: [pre-commit]
-
-# pyproject.toml requires Python >= 3.14; prek defaults to 3.13.
 default_language_version:
   python: python3.14
-
-# Vendored tool distributions (ffmpeg, MKVToolNix, Balabolka) stay byte for byte.
-exclude: ^bin/
+exclude: ^(\.hooks|bin)/
 
 repos:
-# ── CORE — mandatory, every hook here has files in any repo, do not delete ────
-
   - repo: meta
     hooks:
       - id: check-hooks-apply
@@ -41,30 +16,31 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
-      # Fixes the file, then fails the commit. Run `git add` and commit again.
       - id: trailing-whitespace
-        # Two trailing spaces are a hard line break in Markdown.
         args: [--markdown-linebreak-ext=md]
+        stages: [pre-commit]
       - id: end-of-file-fixer
+        stages: [pre-commit]
       - id: mixed-line-ending
         args: [--fix=lf]
-        # .gitattributes checks these out with CRLF; --fix=lf would rewrite them on every commit.
         exclude: \.(bat|cmd)$
       - id: fix-byte-order-marker
-      # Refuses only, changes nothing.
       - id: check-yaml
       - id: check-merge-conflict
       - id: check-added-large-files
         args: [--maxkb=1024]
+        stages: [pre-commit]
       - id: check-case-conflict
       - id: check-illegal-windows-names
       - id: detect-private-key
       - id: forbid-submodules
       - id: destroyed-symlinks
+        stages: [pre-commit]
+      - id: check-json
+      - id: check-toml
+      - id: check-ast
+      - id: debug-statements
 
-  # Fill in --scopes: keep repo and docs, add one scope per top-level area.
-  # It rejects `Revert "..."`, which git writes itself. After git revert,
-  # rewrite the subject as revert(scope): ... — `revert` is on the type list.
   - repo: https://github.com/compilerla/conventional-pre-commit
     rev: v4.4.0
     hooks:
@@ -85,43 +61,15 @@ repos:
           - build
           - revert
 
-  - repo: https://github.com/MattyMroz/agents
-    rev: hooks-v1.3.2 # or newer: prek autoupdate
-    hooks:
-      # U+FFFD is what a botched encoding leaves behind.
-      - id: no-replacement-char
-      # Commit body: summary + Validation block bound to recorded runs.
-      # Format and the mm-validate workflow: presets/hooks/references/commit-message.md
-      - id: commit-validation
-
-# ── DATA FILES — keep each hook only if the repo tracks that file type ────────
-
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v6.0.0
-    hooks:
-      - id: check-json # *.json
-      - id: check-toml # *.toml
-
-# ── MARKDOWN — delete unless the repo carries prose worth formatting ──────────
-
   - repo: https://github.com/hukkin/mdformat
     rev: 0.7.22
     hooks:
       - id: mdformat
         args: [--number]
-        # Without these plugins it wrecks GFM tables.
         additional_dependencies:
           - mdformat-gfm==0.4.1
           - mdformat-tables==1.0.0
           - mdformat-frontmatter==2.0.8
-
-# ── PYTHON — delete unless the repo tracks *.py files ─────────────────────────
-
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v6.0.0
-    hooks:
-      - id: check-ast
-      - id: debug-statements
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.16.2
@@ -129,3 +77,27 @@ repos:
       - id: ruff-check
         args: [--fix]
       - id: ruff-format
+        types_or: [python, pyi, jupyter]
+
+  - repo: local
+    hooks:
+      - id: no-replacement-char
+        name: no U+FFFD replacement character
+        entry: python .hooks/text_guard.py
+        language: python
+        types: [text]
+      - id: no-secret-tokens
+        name: no API tokens in tracked files
+        entry: python .hooks/secret_tokens.py
+        language: python
+        types: [text]
+      - id: no-ai-trailers
+        name: no AI attribution in the commit message
+        entry: python .hooks/ai_trailers.py
+        language: python
+        stages: [commit-msg]
+      - id: no-mutating-assign
+        name: no assignment that mutates its own target container
+        entry: python .hooks/mutating_assign.py
+        language: python
+        types: [python]
